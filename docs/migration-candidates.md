@@ -2,7 +2,7 @@
 
 This inventory is intentionally conservative: move behavior only when multiple repositories are doing the same thing for the same reason.
 
-Exported reusable workflows are documented under `docs/workflows/` using the same base filename as the workflow and declared in `docs/workflows/exports.txt`. Reusable workflows not intended for external consumers are explicitly marked internal.
+Exported reusable workflows are documented under `docs/workflows/` using the same base filename as the workflow. Internal repository workflows are intentionally excluded from that documentation surface.
 
 ## OSS repositories
 
@@ -24,7 +24,6 @@ Current CI is the shared happy path almost verbatim:
 Candidate migration:
 
 - replace `ci.yml` with a thin caller of `.github/workflows/dotnet-ci.yml`;
-- adopt `actions/calculate-next-release` for release version selection;
 - later replace the repeated release build sequence with shared release/publishing primitives.
 
 The release workflow also repeats GitHub Packages publishing, `nuget/login`, NuGet.org publishing, and attaching packages to the GitHub release. Those mechanics should be extracted after the channel policy is normalized with the other OSS repositories.
@@ -39,8 +38,7 @@ Candidate migration:
 
 - use `dotnet-ci.yml` with `pack: true` and `pack_project: src/MinimalOpenAPI/MinimalOpenAPI.csproj`;
 - keep the package-consumption smoke test local;
-- replace the local release-tag validation script with `actions/validate-release`;
-- adopt `actions/calculate-next-release` for stable and prerelease version selection.
+- replace the local release-tag validation script with `actions/validate-release`.
 
 The publish workflow contains project-specific package validation and smoke tests, so the overall workflow should stay local for now.
 
@@ -55,9 +53,9 @@ Candidate migration:
 - use `actions/dotnet-build` for the shared restore/format/build/test portion;
 - keep packing/version-consistency validation local until that check appears in another multi-package repository;
 - replace GitHub release metadata validation with `actions/validate-release`;
-- replace stable and prerelease version calculation with `actions/calculate-next-release`, passing OCP's configured version floor through `minimum-version`.
+- use `actions/calculate-next-release` for stable release targets and channel sequencing, passing OCP's configured minimum version as `minimum-version`.
 
-OCP's manual prerelease flow (`alpha`, `beta`, `rc`, dry-run, generated prerelease versions) can keep its repository-specific publishing policy while delegating version selection to the shared action.
+OCP currently contains one of the clearest implementations of the newer manual prerelease flow (`alpha`, `beta`, `rc`, dry-run, generated prerelease versions). The shared `calculate-next-release` action now models the same channel sequencing and version-floor behavior.
 
 ### AWSLambdaSharpTemplate (KLT)
 
@@ -68,7 +66,7 @@ KLT's main workflow combines standard .NET build/test/package behavior with temp
 Candidate extraction/adoption:
 
 - release metadata validation;
-- `calculate-next-release` for stable and channel-based release selection, passing KLT's configured version floor through `minimum-version`;
+- `calculate-next-release` for stable and channel-based release selection, passing KLT's configured minimum version as `minimum-version`;
 - common NuGet/GitHub Packages publishing mechanics;
 - possibly package artifact upload conventions.
 
@@ -97,7 +95,7 @@ Suggested order:
 1. Adopt `dotnet-ci.yml` in SMCP as the proving consumer.
 2. Adopt `dotnet-ci.yml` in MOA CI.
 3. Adopt `validate-release` in MOA, OCP, and KLT.
-4. Adopt `calculate-next-release` across the OSS repositories for stable and channel-based release version selection.
+4. Adopt `calculate-next-release` for stable and prerelease creation, using `minimum-version` where projects define a floor. Repositories without a stable baseline bootstrap at `0.1.0` by default.
 5. Extract package publishing only when the GitHub Packages / NuGet.org channel policy is identical across at least two repositories.
 6. Revisit Xilo for a coverage-oriented .NET workflow or AWS deployment actions after the OSS path has stabilized.
 

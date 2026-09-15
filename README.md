@@ -17,7 +17,7 @@ The goal of this repository is to centralize automation that is genuinely common
 
 | Action | Description |
 |---|---|
-| [Calculate next release](actions/calculate-next-release/README.md) | Calculates the next stable or channel-based prerelease SemVer release from Git tags, with an optional minimum-version floor. |
+| [Calculate next release](actions/calculate-next-release/README.md) | Calculates the next stable or channel-based prerelease SemVer release from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 
@@ -121,9 +121,9 @@ The action enforces strict Semantic Versioning, verifies that the tag points at 
 
 Releases follow Semantic Versioning and use `v<major>.<minor>.<patch>` tags.
 
-Use the **Create release** workflow from `master` to select a patch, minor, or major bump. The workflow calculates the next version from the latest stable release tag, creates the GitHub release, and processes it by moving the corresponding `v<major>` and `v<major>.<minor>` tags to the released commit.
+Use the **Create release** workflow from `master` to select a patch, minor, or major bump. `minor` is preselected. When no stable release exists yet, the first release is `v0.1.0`; the selected bump only starts applying after that first stable release exists. Stable releases also move the corresponding `v<major>` and `v<major>.<minor>` tags to the released commit.
 
-Use the workflow's `dry_run` option to calculate the next release without creating it. The automated release calculation requires at least one existing stable SemVer tag as its baseline.
+Use the workflow's `dry_run` option to calculate the release without creating it.
 
 ## License
 
