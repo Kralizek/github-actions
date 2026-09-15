@@ -64,12 +64,7 @@ latest_tag=$(
 )
 
 if [ -z "$latest_tag" ]; then
-  if [ -z "$MINIMUM_VERSION" ]; then
-    echo "No stable SemVer release tag exists with prefix '$TAG_PREFIX' and no minimum version was provided."
-    exit 1
-  fi
-
-  base_version="$MINIMUM_VERSION"
+  base_version="${MINIMUM_VERSION:-0.1.0}"
 else
   version="${latest_tag#"$TAG_PREFIX"}"
   IFS=. read -r major minor patch <<< "$version"
