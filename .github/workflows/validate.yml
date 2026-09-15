@@ -1,0 +1,99 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  repository:
+    name: Repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate action folder contract
+        shell: bash
+        run: |
+          shopt -s nullglob
+          action_directories=(actions/*/)
+
+          for directory in "${action_directories[@]}"; do
+            test -f "${directory}action.yml" || {
+              echo "::error file=${directory}::Missing action.yml"
+              exit 1
+            }
+
+            test -f "${directory}README.md" || {
+              echo "::error file=${directory}::Missing README.md"
+              exit 1
+            }
+          done
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          shopt -s nullglob
+          scripts=(actions/*/*.sh)
+
+          for script in "${scripts[@]}"; do
+            bash -n "$script"
+          done
+
+      - name: Test next release calculation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          script="$GITHUB_WORKSPACE/actions/calculate-next-release/calculate.sh"
+          repository=$(mktemp -d)
+          cd "$repository"
+
+          git init -q
+          git config user.name "Validation"
+          git config user.email "validation@example.invalid"
+          touch initial.txt
+          git add initial.txt
+          git commit -qm "Initial commit"
+          git tag v1.2.3
+
+          calculate() {
+            local bump="$1"
+            local output
+            output=$(mktemp)
+
+            BUMP="$bump" \
+            TAG_PREFIX="v" \
+            GITHUB_OUTPUT="$output" \
+              bash "$script" >/dev/null
+
+            cat "$output"
+          }
+
+          patch_output=$(calculate patch)
+          grep -qx 'version=1.2.4' <<< "$patch_output"
+          grep -qx 'tag=v1.2.4' <<< "$patch_output"
+          grep -qx 'previous-tag=v1.2.3' <<< "$patch_output"
+
+          minor_output=$(calculate minor)
+          grep -qx 'version=1.3.0' <<< "$minor_output"
+
+          major_output=$(calculate major)
+          grep -qx 'version=2.0.0' <<< "$major_output"
+
+          git tag v01.9.9
+          git tag v1.02.9
+          git tag v1.2.03
+
+          strict_output=$(calculate patch)
+          grep -qx 'version=1.2.4' <<< "$strict_output"
+          grep -qx 'previous-tag=v1.2.3' <<< "$strict_output"
+
+      - name: Validate workflows
+        uses: docker://rhysd/actionlint:1.7.7

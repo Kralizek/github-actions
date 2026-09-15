@@ -1,0 +1,57 @@
+name: Process release
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to process.
+        type: string
+        required: true
+      prerelease:
+        description: Whether the release is a prerelease.
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+
+jobs:
+  update-version-tags:
+    name: Update version tags
+    if: ${{ !inputs.prerelease && !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Update major and minor tags
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Stable release tag must match v<major>.<minor>.<patch>: $RELEASE_TAG"
+            exit 1
+          fi
+
+          major_tag="v${BASH_REMATCH[1]}"
+          minor_tag="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          release_commit=$(git rev-list -n 1 "$RELEASE_TAG")
+
+          git tag -f "$major_tag" "$release_commit"
+          git tag -f "$minor_tag" "$release_commit"
+
+          git push origin "refs/tags/$major_tag" --force
+          git push origin "refs/tags/$minor_tag" --force
