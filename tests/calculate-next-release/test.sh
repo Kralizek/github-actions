@@ -109,44 +109,59 @@ floor_rc_output=$(calculate minor rc 2.0.0)
 assert_output "$floor_rc_output" 'version=2.0.0-rc.1'
 
 echo "First prerelease in a channel"
-beta_output=$(calculate minor beta)
-assert_output "$beta_output" 'version=1.3.0-beta.1'
-assert_output "$beta_output" 'tag=v1.3.0-beta.1'
-assert_output "$beta_output" 'base-version=1.3.0'
-assert_output "$beta_output" 'prerelease=true'
-assert_output "$beta_output" 'channel=beta'
+alpha_output=$(calculate minor alpha)
+assert_output "$alpha_output" 'version=1.3.0-alpha.1'
+git tag v1.3.0-alpha.1
 
+echo "Allow multiple forward channels on the same commit"
+beta_same_commit_output=$(calculate minor beta)
+assert_output "$beta_same_commit_output" 'version=1.3.0-beta.1'
 git tag v1.3.0-beta.1
-git tag v1.3.0-beta.2
+rc_same_commit_output=$(calculate minor rc)
+assert_output "$rc_same_commit_output" 'version=1.3.0-rc.1'
+git tag v1.3.0-rc.1
+
+echo "Reuse matching prerelease tag on HEAD"
+reused_rc_output=$(calculate minor rc)
+assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
+assert_output "$reused_rc_output" 'tag=v1.3.0-rc.1'
+
+echo "Reject backward channel on the same commit"
+assert_fails calculate minor beta
+assert_fails calculate minor alpha
+
+echo "Advance to a new commit"
 echo changed > initial.txt
 git add initial.txt
 git commit -qm "Advance HEAD"
 
-echo "Increment existing prerelease channel on a new commit"
-next_beta_output=$(calculate minor beta)
-assert_output "$next_beta_output" 'version=1.3.0-beta.3'
+echo "Continue current highest channel across commits"
+next_rc_output=$(calculate minor rc)
+assert_output "$next_rc_output" 'version=1.3.0-rc.2'
+git tag v1.3.0-rc.2
 
-echo "Reuse matching prerelease tag on HEAD"
-git tag v1.3.0-beta.3
-reused_beta_output=$(calculate minor beta)
-assert_output "$reused_beta_output" 'version=1.3.0-beta.3'
-assert_output "$reused_beta_output" 'tag=v1.3.0-beta.3'
-
-echo "Allow forward prerelease channel progression"
-rc_output=$(calculate minor rc)
-assert_output "$rc_output" 'version=1.3.0-rc.1'
-git tag v1.3.0-rc.1
-reused_rc_output=$(calculate minor rc)
-assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
-
-echo "Reject backward prerelease channel progression"
+echo "Reject global channel regression on later commits"
 assert_fails calculate minor beta
 assert_fails calculate minor alpha
 
-echo "Reject multiple matching prerelease tags on HEAD"
-git tag v1.3.0-rc.2
+echo "Allow a lexicographically later channel on a later commit"
+zeta_output=$(calculate minor zeta)
+assert_output "$zeta_output" 'version=1.3.0-zeta.1'
+git tag v1.3.0-zeta.1
+
+echo "Reject returning to rc after later channel exists"
+echo changed-again > initial.txt
+git add initial.txt
+git commit -qm "Advance HEAD again"
 assert_fails calculate minor rc
-git tag -d v1.3.0-rc.2 >/dev/null
+
+echo "Reject multiple matching prerelease tags on HEAD"
+zeta_current_output=$(calculate minor zeta)
+assert_output "$zeta_current_output" 'version=1.3.0-zeta.2'
+git tag v1.3.0-zeta.2
+git tag v1.3.0-zeta.3
+assert_fails calculate minor zeta
+git tag -d v1.3.0-zeta.3 >/dev/null
 
 echo "Allow stable release from a prerelease commit"
 stable_from_prerelease_output=$(calculate minor)
