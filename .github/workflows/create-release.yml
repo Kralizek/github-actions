@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version_bump:
-        description: Version component to increment
+        description: Version component to increment after an existing stable release
         type: choice
         required: true
         default: minor
