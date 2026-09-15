@@ -8,9 +8,11 @@ If no stable release tag exists yet, the action bootstraps at `0.1.0`. When `min
 
 When `channel` is provided, the calculated stable target becomes the prerelease base and the action selects the next numeric sequence for that channel. For example, with `v1.2.3` as the latest stable release, `bump: minor` and `channel: rc` produces `v1.3.0-rc.1`. If `v1.3.0-rc.1` already exists on another commit, the next result is `v1.3.0-rc.2`.
 
-Rerunning the same prerelease operation on a commit that already has exactly one matching tag for the calculated base version and requested channel reuses that tag. Tags for other channels on the same commit are ignored, so a commit may legitimately move from `alpha` to `beta` to `rc`. If multiple matching tags for the same base version and channel point to `HEAD`, the action fails rather than choosing one arbitrarily.
+Rerunning the same prerelease operation on a commit that already has exactly one matching tag for the calculated base version and requested channel reuses that tag. This idempotent reuse is allowed even if later channels have subsequently been used elsewhere. If multiple matching tags for the same base version and channel point to `HEAD`, the action fails rather than choosing one arbitrarily.
 
-Changing channels keeps the same stable target. If `v1.3.0-beta.2` exists, asking for `bump: minor` and `channel: rc` produces `v1.3.0-rc.1`.
+Prerelease channels progress monotonically across the repository for each base version. The action considers all prerelease tags for that base version and rejects any new channel that sorts lexicographically before the highest channel already used. For example, after `v1.3.0-rc.1` exists anywhere, a new `beta` prerelease for `1.3.0` is rejected, while another `rc` or a later channel remains valid. Multiple subsequent channels may still be tagged on the same commit.
+
+A stable release may be created from a commit that already has prerelease tags. A stable tag closes only its own base version: once `v1.3.0` exists, `v1.3.0-*` prereleases are no longer valid targets, but the same commit may still be used for a later base such as `v1.4.0-rc.1` if that is what the current stable baseline and requested bump calculate.
 
 ## Inputs
 

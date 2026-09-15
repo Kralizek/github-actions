@@ -104,52 +104,84 @@ echo "Minimum version does not lower calculated target"
 low_floor_output=$(calculate minor '' 1.1.0)
 assert_output "$low_floor_output" 'version=1.3.0'
 
-echo "Minimum version also applies to prereleases"
+echo "A stable tag for another base does not block prerelease creation"
 floor_rc_output=$(calculate minor rc 2.0.0)
 assert_output "$floor_rc_output" 'version=2.0.0-rc.1'
 
 echo "First prerelease in a channel"
-beta_output=$(calculate minor beta)
-assert_output "$beta_output" 'version=1.3.0-beta.1'
-assert_output "$beta_output" 'tag=v1.3.0-beta.1'
-assert_output "$beta_output" 'base-version=1.3.0'
-assert_output "$beta_output" 'prerelease=true'
-assert_output "$beta_output" 'channel=beta'
+alpha_output=$(calculate minor alpha)
+assert_output "$alpha_output" 'version=1.3.0-alpha.1'
+git tag v1.3.0-alpha.1
 
+echo "Allow multiple forward channels on the same commit"
+beta_same_commit_output=$(calculate minor beta)
+assert_output "$beta_same_commit_output" 'version=1.3.0-beta.1'
 git tag v1.3.0-beta.1
-git tag v1.3.0-beta.2
+rc_same_commit_output=$(calculate minor rc)
+assert_output "$rc_same_commit_output" 'version=1.3.0-rc.1'
+git tag v1.3.0-rc.1
+
+echo "Reuse matching prerelease tag on HEAD"
+reused_rc_output=$(calculate minor rc)
+assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
+assert_output "$reused_rc_output" 'tag=v1.3.0-rc.1'
+
+echo "Existing earlier channels on the same commit remain idempotent"
+reused_beta_output=$(calculate minor beta)
+assert_output "$reused_beta_output" 'version=1.3.0-beta.1'
+reused_alpha_output=$(calculate minor alpha)
+assert_output "$reused_alpha_output" 'version=1.3.0-alpha.1'
+
+echo "Advance to a new commit"
 echo changed > initial.txt
 git add initial.txt
 git commit -qm "Advance HEAD"
 
-echo "Increment existing prerelease channel on a new commit"
-next_beta_output=$(calculate minor beta)
-assert_output "$next_beta_output" 'version=1.3.0-beta.3'
+echo "Continue current highest channel across commits"
+next_rc_output=$(calculate minor rc)
+assert_output "$next_rc_output" 'version=1.3.0-rc.2'
+git tag v1.3.0-rc.2
 
-echo "Reuse matching prerelease tag on HEAD"
-git tag v1.3.0-beta.3
-reused_beta_output=$(calculate minor beta)
-assert_output "$reused_beta_output" 'version=1.3.0-beta.3'
-assert_output "$reused_beta_output" 'tag=v1.3.0-beta.3'
+echo "Reject global channel regression on later commits"
+assert_fails calculate minor beta
+assert_fails calculate minor alpha
 
-echo "Different channel on the same commit is independent"
-rc_output=$(calculate minor rc)
-assert_output "$rc_output" 'version=1.3.0-rc.1'
-git tag v1.3.0-rc.1
-reused_rc_output=$(calculate minor rc)
-assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
+echo "Allow a lexicographically later channel on a later commit"
+zeta_output=$(calculate minor zeta)
+assert_output "$zeta_output" 'version=1.3.0-zeta.1'
+git tag v1.3.0-zeta.1
+
+echo "Reject returning to rc after later channel exists"
+echo changed-again > initial.txt
+git add initial.txt
+git commit -qm "Advance HEAD again"
+assert_fails calculate minor rc
 
 echo "Reject multiple matching prerelease tags on HEAD"
-git tag v1.3.0-beta.4
-assert_fails calculate minor beta
+zeta_current_output=$(calculate minor zeta)
+assert_output "$zeta_current_output" 'version=1.3.0-zeta.2'
+git tag v1.3.0-zeta.2
+git tag v1.3.0-zeta.3
+assert_fails calculate minor zeta
+git tag -d v1.3.0-zeta.3 >/dev/null
+
+echo "Allow stable release from a prerelease commit"
+stable_from_prerelease_output=$(calculate minor)
+assert_output "$stable_from_prerelease_output" 'version=1.3.0'
+assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
+
+echo "A stable release advances the baseline, leaving later bases available"
+git tag v1.3.0
+later_prerelease_output=$(calculate minor rc)
+assert_output "$later_prerelease_output" 'version=1.4.0-rc.1'
 
 echo "Ignore malformed stable tags"
 git tag v01.9.9
 git tag v1.02.9
 git tag v1.2.03
 ignored_invalid_output=$(calculate patch)
-assert_output "$ignored_invalid_output" 'previous-tag=v1.2.3'
-assert_output "$ignored_invalid_output" 'version=1.2.4'
+assert_output "$ignored_invalid_output" 'previous-tag=v1.3.0'
+assert_output "$ignored_invalid_output" 'version=1.3.1'
 
 echo "Reject invalid minimum versions"
 assert_fails calculate patch '' 01.2.3
