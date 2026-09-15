@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+stable_version_pattern='(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+
 case "$BUMP" in
   patch|minor|major)
     ;;
@@ -13,7 +15,7 @@ esac
 escaped_prefix=$(printf '%s' "$TAG_PREFIX" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
 latest_tag=$(
   git tag -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname \
-    | grep -E "^${escaped_prefix}[0-9]+\.[0-9]+\.[0-9]+$" \
+    | grep -E "^${escaped_prefix}${stable_version_pattern}$" \
     | head -n 1 \
     || true
 )
