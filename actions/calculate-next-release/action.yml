@@ -1,0 +1,33 @@
+name: Calculate next release
+description: Calculate the next stable SemVer release from Git tags.
+
+inputs:
+  bump:
+    description: "Version component to increment: patch, minor, or major."
+    required: true
+  tag-prefix:
+    description: Prefix used by release tags.
+    required: false
+    default: v
+
+outputs:
+  version:
+    description: Calculated SemVer version without the tag prefix.
+    value: ${{ steps.calculate.outputs.version }}
+  tag:
+    description: Calculated release tag including the configured prefix.
+    value: ${{ steps.calculate.outputs.tag }}
+  previous-tag:
+    description: Latest stable release tag used as the calculation baseline.
+    value: ${{ steps.calculate.outputs.previous-tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Calculate next release
+      id: calculate
+      shell: bash
+      env:
+        BUMP: ${{ inputs.bump }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+      run: bash "${{ github.action_path }}/calculate.sh"
