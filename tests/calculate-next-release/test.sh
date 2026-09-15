@@ -126,9 +126,11 @@ reused_rc_output=$(calculate minor rc)
 assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
 assert_output "$reused_rc_output" 'tag=v1.3.0-rc.1'
 
-echo "Reject backward channel on the same commit"
-assert_fails calculate minor beta
-assert_fails calculate minor alpha
+echo "Existing earlier channels on the same commit remain idempotent"
+reused_beta_output=$(calculate minor beta)
+assert_output "$reused_beta_output" 'version=1.3.0-beta.1'
+reused_alpha_output=$(calculate minor alpha)
+assert_output "$reused_alpha_output" 'version=1.3.0-alpha.1'
 
 echo "Advance to a new commit"
 echo changed > initial.txt
