@@ -1,0 +1,83 @@
+name: .NET Build and Test
+description: Opinionated checkout, restore, format, build, and test sequence for .NET repositories.
+
+inputs:
+  global_json_file:
+    description: Path to global.json. Leave empty to use dotnet_version instead.
+    required: false
+    default: global.json
+  dotnet_version:
+    description: .NET SDK version to install when global_json_file is empty.
+    required: false
+    default: ''
+  configuration:
+    description: Build configuration.
+    required: false
+    default: Release
+  working_directory:
+    description: Working directory for dotnet commands.
+    required: false
+    default: .
+  checkout:
+    description: Whether to checkout the caller repository.
+    required: false
+    default: 'true'
+  fetch_depth:
+    description: Checkout fetch depth. Zero keeps full history for MinVer and similar tools.
+    required: false
+    default: '0'
+  format:
+    description: Whether to verify formatting with dotnet format.
+    required: false
+    default: 'true'
+  test:
+    description: Whether to run dotnet test.
+    required: false
+    default: 'true'
+  test_arguments:
+    description: Additional arguments passed to dotnet test.
+    required: false
+    default: --logger GitHubActions
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      if: inputs.checkout == 'true'
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: ${{ inputs.fetch_depth }}
+
+    - name: Setup .NET from global.json
+      if: inputs.global_json_file != ''
+      uses: actions/setup-dotnet@v6
+      with:
+        global-json-file: ${{ inputs.global_json_file }}
+
+    - name: Setup .NET version
+      if: inputs.global_json_file == '' && inputs.dotnet_version != ''
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ inputs.dotnet_version }}
+
+    - name: Restore
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: dotnet restore
+
+    - name: Verify formatting
+      if: inputs.format == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: dotnet format --verify-no-changes --no-restore
+
+    - name: Build
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: dotnet build --configuration "${{ inputs.configuration }}" --no-restore --warnaserror
+
+    - name: Test
+      if: inputs.test == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: dotnet test --configuration "${{ inputs.configuration }}" --no-build ${{ inputs.test_arguments }}
