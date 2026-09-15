@@ -45,6 +45,7 @@ jobs:
         uses: ./actions/calculate-next-release
         with:
           bump: ${{ inputs.version_bump }}
+          minimum-version: 1.0.0
 
       - name: Create GitHub release
         if: ${{ !inputs.dry_run }}
