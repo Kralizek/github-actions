@@ -108,33 +108,11 @@ if [ -n "$CHANNEL" ]; then
 
   prerelease_base_prefix="${TAG_PREFIX}${base_version}-"
   prerelease_base_pattern="^${escaped_prefix}${base_version//./\\.}-([0-9A-Za-z-]+)\.(0|[1-9][0-9]*)$"
-
-  mapfile -t current_base_tags < <(
-    git tag --points-at HEAD -l "${prerelease_base_prefix}*" \
-      | grep -E "$prerelease_base_pattern" \
-      | sort -V \
-      || true
-  )
-
-  highest_channel=''
-  for tag in "${current_base_tags[@]}"; do
-    suffix="${tag#"$prerelease_base_prefix"}"
-    tag_channel="${suffix%.*}"
-    if [ -z "$highest_channel" ] || [[ "$tag_channel" > "$highest_channel" ]]; then
-      highest_channel="$tag_channel"
-    fi
-  done
-
-  if [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
-    echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version} on HEAD."
-    exit 1
-  fi
-
   escaped_channel=$(printf '%s' "$CHANNEL" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
   prerelease_pattern="^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$"
 
   mapfile -t current_channel_tags < <(
-    printf '%s\n' "${current_base_tags[@]}" \
+    git tag --points-at HEAD -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" \
       | grep -E "$prerelease_pattern" \
       | sort -V \
       || true
@@ -149,10 +127,32 @@ if [ -n "$CHANNEL" ]; then
     reused_tag="${current_channel_tags[0]}"
     next_version="${reused_tag#"$TAG_PREFIX"}"
   else
+    mapfile -t all_base_tags < <(
+      git tag -l "${prerelease_base_prefix}*" \
+        | grep -E "$prerelease_base_pattern" \
+        | sort -V \
+        || true
+    )
+
+    highest_channel=''
+    for tag in "${all_base_tags[@]}"; do
+      suffix="${tag#"$prerelease_base_prefix"}"
+      tag_channel="${suffix%.*}"
+      if [ -z "$highest_channel" ] || [[ "$tag_channel" > "$highest_channel" ]]; then
+        highest_channel="$tag_channel"
+      fi
+    done
+
+    if [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
+      echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version}."
+      exit 1
+    fi
+
     latest_channel_tag=$(
-      git tag -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" --sort=-version:refname \
+      printf '%s\n' "${all_base_tags[@]}" \
         | grep -E "$prerelease_pattern" \
-        | head -n 1 \
+        | sort -V \
+        | tail -n 1 \
         || true
     )
 
