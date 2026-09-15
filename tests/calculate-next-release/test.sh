@@ -132,24 +132,39 @@ reused_beta_output=$(calculate minor beta)
 assert_output "$reused_beta_output" 'version=1.3.0-beta.3'
 assert_output "$reused_beta_output" 'tag=v1.3.0-beta.3'
 
-echo "Different channel on the same commit is independent"
+echo "Allow forward prerelease channel progression"
 rc_output=$(calculate minor rc)
 assert_output "$rc_output" 'version=1.3.0-rc.1'
 git tag v1.3.0-rc.1
 reused_rc_output=$(calculate minor rc)
 assert_output "$reused_rc_output" 'version=1.3.0-rc.1'
 
-echo "Reject multiple matching prerelease tags on HEAD"
-git tag v1.3.0-beta.4
+echo "Reject backward prerelease channel progression"
 assert_fails calculate minor beta
+assert_fails calculate minor alpha
+
+echo "Reject multiple matching prerelease tags on HEAD"
+git tag v1.3.0-rc.2
+assert_fails calculate minor rc
+git tag -d v1.3.0-rc.2 >/dev/null
+
+echo "Allow stable release from a prerelease commit"
+stable_from_prerelease_output=$(calculate minor)
+assert_output "$stable_from_prerelease_output" 'version=1.3.0'
+assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
+
+echo "Reject prerelease after stable release on the same commit"
+git tag v1.3.0
+assert_fails calculate minor rc
+assert_fails calculate major zeta
 
 echo "Ignore malformed stable tags"
 git tag v01.9.9
 git tag v1.02.9
 git tag v1.2.03
 ignored_invalid_output=$(calculate patch)
-assert_output "$ignored_invalid_output" 'previous-tag=v1.2.3'
-assert_output "$ignored_invalid_output" 'version=1.2.4'
+assert_output "$ignored_invalid_output" 'previous-tag=v1.3.0'
+assert_output "$ignored_invalid_output" 'version=1.3.1'
 
 echo "Reject invalid minimum versions"
 assert_fails calculate patch '' 01.2.3
