@@ -29,6 +29,12 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
 
     steps:
+      - name: Validate release source
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "Releases must be dispatched from master."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
