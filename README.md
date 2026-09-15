@@ -121,7 +121,7 @@ The action enforces strict Semantic Versioning, verifies that the tag points at 
 
 Releases follow Semantic Versioning and use `v<major>.<minor>.<patch>` tags.
 
-Use the **Create release** workflow from `master` to select a patch, minor, or major bump. `minor` is preselected. When no stable release exists yet, the first release defaults to `v0.1.0`; the selected bump only starts applying after that first stable release exists. Stable releases also move the corresponding `v<major>` and `v<major>.<minor>` tags to the released commit.
+Use the **Create release** workflow from `master` to select a patch, minor, or major bump. `minor` is preselected. When no stable release exists yet, the first release is `v0.1.0`; the selected bump only starts applying after that first stable release exists. Stable releases also move the corresponding `v<major>` and `v<major>.<minor>` tags to the released commit.
 
 Use the workflow's `dry_run` option to calculate the release without creating it.
 
