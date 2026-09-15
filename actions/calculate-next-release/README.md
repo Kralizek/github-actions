@@ -8,9 +8,11 @@ If no stable release tag exists yet, the action bootstraps at `0.1.0`. When `min
 
 When `channel` is provided, the calculated stable target becomes the prerelease base and the action selects the next numeric sequence for that channel. For example, with `v1.2.3` as the latest stable release, `bump: minor` and `channel: rc` produces `v1.3.0-rc.1`. If `v1.3.0-rc.1` already exists on another commit, the next result is `v1.3.0-rc.2`.
 
-Rerunning the same prerelease operation on a commit that already has exactly one matching tag for the calculated base version and requested channel reuses that tag. Tags for other channels on the same commit are ignored, so a commit may legitimately move from `alpha` to `beta` to `rc`. If multiple matching tags for the same base version and channel point to `HEAD`, the action fails rather than choosing one arbitrarily.
+Rerunning the same prerelease operation on a commit that already has exactly one matching tag for the calculated base version and requested channel reuses that tag. If multiple matching tags for the same base version and channel point to `HEAD`, the action fails rather than choosing one arbitrarily.
 
-Changing channels keeps the same stable target. If `v1.3.0-beta.2` exists, asking for `bump: minor` and `channel: rc` produces `v1.3.0-rc.1`.
+Prerelease channels on the same commit may only move lexicographically forward for the same base version. For example, `alpha` → `beta` → `rc` is allowed, while `rc` → `beta` is rejected. The action keeps channels generic and does not hard-code a lifecycle; ordering is based on the channel identifier itself.
+
+A stable release may be created from a commit that already has prerelease tags. Once a valid stable release tag points to a commit, however, no further prerelease may be generated from that commit.
 
 ## Inputs
 
