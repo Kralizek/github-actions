@@ -87,5 +87,13 @@ jobs:
           major_output=$(calculate major)
           grep -qx 'version=2.0.0' <<< "$major_output"
 
+          git tag v01.9.9
+          git tag v1.02.9
+          git tag v1.2.03
+
+          strict_output=$(calculate patch)
+          grep -qx 'version=1.2.4' <<< "$strict_output"
+          grep -qx 'previous-tag=v1.2.3' <<< "$strict_output"
+
       - name: Validate workflows
         uses: docker://rhysd/actionlint:1.7.7
