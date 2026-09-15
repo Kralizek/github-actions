@@ -3,14 +3,14 @@ description: Calculate the next stable or prerelease SemVer release from Git tag
 
 inputs:
   bump:
-    description: "Version component to increment: patch, minor, or major."
+    description: "Version component to increment after an existing stable release: patch, minor, or major."
     required: true
   channel:
     description: Optional prerelease channel, for example alpha, beta, or rc.
     required: false
     default: ''
   minimum-version:
-    description: Optional stable SemVer floor for the calculated release target.
+    description: Optional stable SemVer floor. Also replaces the default 0.1.0 bootstrap target when no stable tag exists.
     required: false
     default: ''
   tag-prefix:
