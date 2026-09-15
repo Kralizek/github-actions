@@ -18,4 +18,6 @@ The runner discovers every `tests/*/test.sh` file. Each suite should:
 
 When wrapping a command in a helper function, propagate its exit status explicitly. Bash disables some `set -e` behavior for functions evaluated as conditions, so negative tests should not rely on `errexit` alone.
 
+The release-calculation suite covers bootstrap behavior (default `0.1.0` and explicit `minimum-version`) as well as bumps after a stable baseline exists.
+
 The validation workflow also runs `bash -n` over shell scripts under both `actions/` and `tests/` before executing the suites.
