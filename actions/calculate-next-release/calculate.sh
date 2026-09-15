@@ -94,11 +94,41 @@ fi
 reused_tag=''
 
 if [ -n "$CHANNEL" ]; then
+  stable_tag="${TAG_PREFIX}${base_version}"
+  if git tag --points-at HEAD -l "$stable_tag" | grep -qxF "$stable_tag"; then
+    echo "Cannot create prerelease ${base_version}-${CHANNEL} because stable tag ${stable_tag} already points to HEAD."
+    exit 1
+  fi
+
+  prerelease_base_prefix="${TAG_PREFIX}${base_version}-"
+  prerelease_base_pattern="^${escaped_prefix}${base_version//./\\.}-([0-9A-Za-z-]+)\.(0|[1-9][0-9]*)$"
+
+  mapfile -t current_base_tags < <(
+    git tag --points-at HEAD -l "${prerelease_base_prefix}*" \
+      | grep -E "$prerelease_base_pattern" \
+      | sort -V \
+      || true
+  )
+
+  highest_channel=''
+  for tag in "${current_base_tags[@]}"; do
+    suffix="${tag#"$prerelease_base_prefix"}"
+    tag_channel="${suffix%.*}"
+    if [ -z "$highest_channel" ] || [[ "$tag_channel" > "$highest_channel" ]]; then
+      highest_channel="$tag_channel"
+    fi
+  done
+
+  if [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
+    echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version} on HEAD."
+    exit 1
+  fi
+
   escaped_channel=$(printf '%s' "$CHANNEL" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
   prerelease_pattern="^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$"
 
   mapfile -t current_channel_tags < <(
-    git tag --points-at HEAD -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" \
+    printf '%s\n' "${current_base_tags[@]}" \
       | grep -E "$prerelease_pattern" \
       | sort -V \
       || true
