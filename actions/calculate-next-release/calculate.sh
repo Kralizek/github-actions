@@ -91,23 +91,45 @@ else
   fi
 fi
 
+reused_tag=''
+
 if [ -n "$CHANNEL" ]; then
   escaped_channel=$(printf '%s' "$CHANNEL" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
-  latest_channel_tag=$(
-    git tag -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" --sort=-version:refname \
-      | grep -E "^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$" \
-      | head -n 1 \
+  prerelease_pattern="^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$"
+
+  mapfile -t current_channel_tags < <(
+    git tag --points-at HEAD -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" \
+      | grep -E "$prerelease_pattern" \
+      | sort -V \
       || true
   )
 
-  if [ -z "$latest_channel_tag" ]; then
-    channel_number=1
-  else
-    channel_number="${latest_channel_tag##*.}"
-    channel_number=$((channel_number + 1))
+  if [ "${#current_channel_tags[@]}" -gt 1 ]; then
+    echo "Multiple ${CHANNEL} prerelease tags for ${base_version} point to HEAD: ${current_channel_tags[*]}"
+    exit 1
   fi
 
-  next_version="${base_version}-${CHANNEL}.${channel_number}"
+  if [ "${#current_channel_tags[@]}" -eq 1 ]; then
+    reused_tag="${current_channel_tags[0]}"
+    next_version="${reused_tag#"$TAG_PREFIX"}"
+  else
+    latest_channel_tag=$(
+      git tag -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" --sort=-version:refname \
+        | grep -E "$prerelease_pattern" \
+        | head -n 1 \
+        || true
+    )
+
+    if [ -z "$latest_channel_tag" ]; then
+      channel_number=1
+    else
+      channel_number="${latest_channel_tag##*.}"
+      channel_number=$((channel_number + 1))
+    fi
+
+    next_version="${base_version}-${CHANNEL}.${channel_number}"
+  fi
+
   prerelease=true
 else
   next_version="$base_version"
@@ -116,13 +138,17 @@ fi
 
 next_tag="${TAG_PREFIX}${next_version}"
 
-if git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
+if [ -z "$reused_tag" ] && git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
   echo "Tag ${next_tag} already exists."
   exit 1
 fi
 
 echo "Previous stable release: ${latest_tag:-none}"
-echo "Next release: $next_tag"
+if [ -n "$reused_tag" ]; then
+  echo "Reusing prerelease tag on HEAD: $reused_tag"
+else
+  echo "Next release: $next_tag"
+fi
 echo "previous-tag=$latest_tag" >> "$GITHUB_OUTPUT"
 echo "base-version=$base_version" >> "$GITHUB_OUTPUT"
 echo "version=$next_version" >> "$GITHUB_OUTPUT"
