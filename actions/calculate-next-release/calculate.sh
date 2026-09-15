@@ -64,32 +64,36 @@ latest_tag=$(
 )
 
 if [ -z "$latest_tag" ]; then
-  echo "No stable SemVer release tag exists with prefix '$TAG_PREFIX'."
-  exit 1
-fi
+  if [ -z "$MINIMUM_VERSION" ]; then
+    echo "No stable SemVer release tag exists with prefix '$TAG_PREFIX' and no minimum version was provided."
+    exit 1
+  fi
 
-version="${latest_tag#"$TAG_PREFIX"}"
-IFS=. read -r major minor patch <<< "$version"
-
-case "$BUMP" in
-  patch)
-    patch=$((patch + 1))
-    ;;
-  minor)
-    minor=$((minor + 1))
-    patch=0
-    ;;
-  major)
-    major=$((major + 1))
-    minor=0
-    patch=0
-    ;;
-esac
-
-base_version="${major}.${minor}.${patch}"
-
-if [ -n "$MINIMUM_VERSION" ] && version_greater_than "$MINIMUM_VERSION" "$base_version"; then
   base_version="$MINIMUM_VERSION"
+else
+  version="${latest_tag#"$TAG_PREFIX"}"
+  IFS=. read -r major minor patch <<< "$version"
+
+  case "$BUMP" in
+    patch)
+      patch=$((patch + 1))
+      ;;
+    minor)
+      minor=$((minor + 1))
+      patch=0
+      ;;
+    major)
+      major=$((major + 1))
+      minor=0
+      patch=0
+      ;;
+  esac
+
+  base_version="${major}.${minor}.${patch}"
+
+  if [ -n "$MINIMUM_VERSION" ] && version_greater_than "$MINIMUM_VERSION" "$base_version"; then
+    base_version="$MINIMUM_VERSION"
+  fi
 fi
 
 if [ -n "$CHANNEL" ]; then
@@ -122,7 +126,7 @@ if git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
   exit 1
 fi
 
-echo "Previous stable release: $latest_tag"
+echo "Previous stable release: ${latest_tag:-none}"
 echo "Next release: $next_tag"
 echo "previous-tag=$latest_tag" >> "$GITHUB_OUTPUT"
 echo "base-version=$base_version" >> "$GITHUB_OUTPUT"
