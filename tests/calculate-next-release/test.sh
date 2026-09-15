@@ -104,7 +104,7 @@ echo "Minimum version does not lower calculated target"
 low_floor_output=$(calculate minor '' 1.1.0)
 assert_output "$low_floor_output" 'version=1.3.0'
 
-echo "Minimum version also applies to prereleases"
+echo "A stable tag for another base does not block prerelease creation"
 floor_rc_output=$(calculate minor rc 2.0.0)
 assert_output "$floor_rc_output" 'version=2.0.0-rc.1'
 
@@ -168,10 +168,13 @@ stable_from_prerelease_output=$(calculate minor)
 assert_output "$stable_from_prerelease_output" 'version=1.3.0'
 assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
 
-echo "Reject prerelease after stable release on the same commit"
+echo "A stable release closes prereleases for that base version"
 git tag v1.3.0
-assert_fails calculate minor rc
-assert_fails calculate major zeta
+assert_fails calculate patch rc ''
+
+echo "But a later base version remains available for prereleases"
+later_prerelease_output=$(calculate minor rc)
+assert_output "$later_prerelease_output" 'version=1.4.0-rc.1'
 
 echo "Ignore malformed stable tags"
 git tag v01.9.9
