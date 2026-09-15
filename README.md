@@ -11,6 +11,7 @@ The goal of this repository is to centralize automation that is genuinely common
 - **Repository-specific checks stay local.** Package smoke tests, benchmarks, deployment topology, database migrations, and product-specific release rules should remain in their repositories unless multiple projects converge on the same behavior.
 - **Callers own policy.** Publishing and deployment workflows should not hide repository, environment, or permission decisions.
 - **Version consumers.** Repositories should consume released tags such as `@v1` rather than `@master` once this repository starts publishing releases.
+- **Reusable workflows declare their audience.** Every workflow exposing `workflow_call` must either be exported and documented under `docs/workflows/`, or explicitly marked `# internal-workflow` when it exists only for this repository.
 
 ## Actions
 
@@ -73,30 +74,6 @@ The validation workflow first runs `bash -n` over shell scripts under both `acti
 When adding Bash-backed behavior, add or extend a matching suite under `tests/`. Tests should create their own temporary fixtures and clean them up so they remain isolated and runnable locally with `bash tests/run.sh`.
 
 See [`tests/README.md`](tests/README.md) for the test conventions.
-
-## Calculate next release
-
-Stable release:
-
-```yaml
-- uses: Kralizek/github-actions/actions/calculate-next-release@master
-  id: release
-  with:
-    bump: minor
-```
-
-Prerelease channel with a version floor:
-
-```yaml
-- uses: Kralizek/github-actions/actions/calculate-next-release@master
-  id: release
-  with:
-    bump: minor
-    channel: rc
-    minimum-version: 2.0.0
-```
-
-With `v1.2.3` as the latest stable tag, the latter produces `v2.0.0-rc.1`, then `v2.0.0-rc.2`, and so on. Without `minimum-version`, the same request would target `v1.3.0-rc.1`. Each channel has an independent sequence against the same stable target.
 
 ## Reusable .NET CI workflow
 
