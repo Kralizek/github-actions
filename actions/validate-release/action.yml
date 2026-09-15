@@ -1,0 +1,26 @@
+name: Validate GitHub Release
+description: Validate a v-prefixed SemVer tag, its target commit, and the GitHub prerelease flag.
+
+inputs:
+  tag:
+    description: Release tag, normally github.event.release.tag_name.
+    required: true
+  prerelease:
+    description: GitHub prerelease flag, normally github.event.release.prerelease.
+    required: true
+
+outputs:
+  version:
+    description: Semantic version without the leading v.
+    value: ${{ steps.validate.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate release metadata
+      id: validate
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_IS_PRERELEASE: ${{ inputs.prerelease }}
+      run: bash "${{ github.action_path }}/validate.sh"

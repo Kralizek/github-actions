@@ -1,0 +1,145 @@
+name: Reusable .NET CI
+
+on:
+  workflow_call:
+    inputs:
+      global_json_file:
+        description: Workspace-relative path to global.json. Leave empty to use dotnet_version instead.
+        type: string
+        required: false
+        default: global.json
+      dotnet_version:
+        description: .NET SDK version to install when global_json_file is empty.
+        type: string
+        required: false
+        default: ''
+      configuration:
+        description: Build configuration.
+        type: string
+        required: false
+        default: Release
+      working_directory:
+        description: Workspace-relative working directory for dotnet commands.
+        type: string
+        required: false
+        default: .
+      format:
+        description: Verify formatting with dotnet format.
+        type: boolean
+        required: false
+        default: true
+      test:
+        description: Run dotnet test.
+        type: boolean
+        required: false
+        default: true
+      test_arguments:
+        description: Additional arguments passed to dotnet test.
+        type: string
+        required: false
+        default: --logger GitHubActions
+      pack:
+        description: Pack NuGet packages and upload them as a workflow artifact.
+        type: boolean
+        required: false
+        default: false
+      pack_project:
+        description: Optional project or solution passed to dotnet pack, relative to working_directory. Empty packs the default solution/project.
+        type: string
+        required: false
+        default: ''
+      pack_output:
+        description: Workspace-relative output directory for packed packages.
+        type: string
+        required: false
+        default: ./artifacts/packages
+      artifact_name:
+        description: Name of the uploaded package artifact.
+        type: string
+        required: false
+        default: nuget-packages
+      artifact_path:
+        description: Workspace-relative files uploaded when pack is enabled.
+        type: string
+        required: false
+        default: |
+          ./artifacts/packages/*.nupkg
+          ./artifacts/packages/*.snupkg
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET from global.json
+        if: inputs.global_json_file != ''
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: ${{ inputs.global_json_file }}
+
+      - name: Setup .NET version
+        if: inputs.global_json_file == '' && inputs.dotnet_version != ''
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Restore
+        working-directory: ${{ inputs.working_directory }}
+        run: dotnet restore
+
+      - name: Verify formatting
+        if: inputs.format
+        working-directory: ${{ inputs.working_directory }}
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build
+        working-directory: ${{ inputs.working_directory }}
+        run: dotnet build --configuration "${{ inputs.configuration }}" --no-restore --warnaserror
+
+      - name: Test
+        if: inputs.test
+        working-directory: ${{ inputs.working_directory }}
+        run: dotnet test --configuration "${{ inputs.configuration }}" --no-build ${{ inputs.test_arguments }}
+
+      - name: Pack
+        if: inputs.pack
+        working-directory: ${{ inputs.working_directory }}
+        shell: bash
+        env:
+          PACK_PROJECT: ${{ inputs.pack_project }}
+          PACK_OUTPUT: ${{ inputs.pack_output }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$PACK_OUTPUT" = /* ]]; then
+            resolved_pack_output="$PACK_OUTPUT"
+          else
+            resolved_pack_output="$GITHUB_WORKSPACE/$PACK_OUTPUT"
+          fi
+
+          if [ -n "$PACK_PROJECT" ]; then
+            dotnet pack "$PACK_PROJECT" --configuration "${{ inputs.configuration }}" --no-build --output "$resolved_pack_output"
+          else
+            dotnet pack --configuration "${{ inputs.configuration }}" --no-build --output "$resolved_pack_output"
+          fi
+
+      - name: Upload packages
+        if: inputs.pack
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: ${{ inputs.artifact_path }}
+          if-no-files-found: error
