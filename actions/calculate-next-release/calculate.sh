@@ -94,15 +94,9 @@ fi
 reused_tag=''
 
 if [ -n "$CHANNEL" ]; then
-  current_stable_tag=$(
-    git tag --points-at HEAD -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" \
-      | grep -E "^${escaped_prefix}${stable_version_pattern}$" \
-      | head -n 1 \
-      || true
-  )
-
-  if [ -n "$current_stable_tag" ]; then
-    echo "Cannot create prerelease ${base_version}-${CHANNEL} because stable tag ${current_stable_tag} already points to HEAD."
+  stable_base_tag="${TAG_PREFIX}${base_version}"
+  if git rev-parse -q --verify "refs/tags/${stable_base_tag}" >/dev/null; then
+    echo "Cannot create prerelease ${base_version}-${CHANNEL} because stable tag ${stable_base_tag} already exists."
     exit 1
   fi
 
