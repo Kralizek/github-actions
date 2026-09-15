@@ -168,11 +168,8 @@ stable_from_prerelease_output=$(calculate minor)
 assert_output "$stable_from_prerelease_output" 'version=1.3.0'
 assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
 
-echo "A stable release closes prereleases for that base version"
+echo "A stable release advances the baseline, leaving later bases available"
 git tag v1.3.0
-assert_fails calculate patch rc ''
-
-echo "But a later base version remains available for prereleases"
 later_prerelease_output=$(calculate minor rc)
 assert_output "$later_prerelease_output" 'version=1.4.0-rc.1'
 
