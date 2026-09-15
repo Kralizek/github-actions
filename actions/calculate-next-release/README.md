@@ -12,7 +12,7 @@ Rerunning the same prerelease operation on a commit that already has exactly one
 
 Prerelease channels progress monotonically across the repository for each base version. The action considers all prerelease tags for that base version and rejects any new channel that sorts lexicographically before the highest channel already used. For example, after `v1.3.0-rc.1` exists anywhere, a new `beta` prerelease for `1.3.0` is rejected, while another `rc` or a later channel remains valid. Multiple subsequent channels may still be tagged on the same commit.
 
-A stable release may be created from a commit that already has prerelease tags. Once a valid stable release tag points to a commit, however, no further prerelease may be generated from that commit.
+A stable release may be created from a commit that already has prerelease tags. A stable tag closes only its own base version: once `v1.3.0` exists, `v1.3.0-*` prereleases are no longer valid targets, but the same commit may still be used for a later base such as `v1.4.0-rc.1` if that is what the current stable baseline and requested bump calculate.
 
 ## Inputs
 
