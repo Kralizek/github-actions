@@ -13,7 +13,6 @@ git config user.email "validation@example.invalid"
 touch initial.txt
 git add initial.txt
 git commit -qm "Initial commit"
-git tag v1.2.3
 
 calculate() {
   local bump="$1"
@@ -54,6 +53,21 @@ assert_fails() {
     exit 1
   fi
 }
+
+echo "Bootstrap stable release from minimum version"
+bootstrap_output=$(calculate minor '' 1.0.0)
+assert_output "$bootstrap_output" 'previous-tag='
+assert_output "$bootstrap_output" 'base-version=1.0.0'
+assert_output "$bootstrap_output" 'version=1.0.0'
+assert_output "$bootstrap_output" 'tag=v1.0.0'
+
+echo "Bootstrap prerelease from minimum version"
+bootstrap_rc_output=$(calculate major rc 2.0.0)
+assert_output "$bootstrap_rc_output" 'version=2.0.0-rc.1'
+
+assert_fails calculate patch
+
+git tag v1.2.3
 
 echo "Stable patch release"
 patch_output=$(calculate patch)
