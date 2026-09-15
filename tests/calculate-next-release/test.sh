@@ -54,6 +54,13 @@ assert_fails() {
   fi
 }
 
+echo "Default first stable release"
+bootstrap_default_output=$(calculate minor)
+assert_output "$bootstrap_default_output" 'previous-tag='
+assert_output "$bootstrap_default_output" 'base-version=0.1.0'
+assert_output "$bootstrap_default_output" 'version=0.1.0'
+assert_output "$bootstrap_default_output" 'tag=v0.1.0'
+
 echo "Bootstrap stable release from minimum version"
 bootstrap_output=$(calculate minor '' 1.0.0)
 assert_output "$bootstrap_output" 'previous-tag='
@@ -61,11 +68,13 @@ assert_output "$bootstrap_output" 'base-version=1.0.0'
 assert_output "$bootstrap_output" 'version=1.0.0'
 assert_output "$bootstrap_output" 'tag=v1.0.0'
 
+echo "Bootstrap prerelease from default first version"
+bootstrap_default_rc_output=$(calculate minor rc)
+assert_output "$bootstrap_default_rc_output" 'version=0.1.0-rc.1'
+
 echo "Bootstrap prerelease from minimum version"
 bootstrap_rc_output=$(calculate major rc 2.0.0)
 assert_output "$bootstrap_rc_output" 'version=2.0.0-rc.1'
-
-assert_fails calculate patch
 
 git tag v1.2.3
 
