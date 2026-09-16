@@ -18,17 +18,31 @@ inputs:
 outputs:
   release:
     description: Calculated or reused release identifier.
+    value: ${{ steps.calculate.outputs.release }}
   tag:
     description: Calculated or reused release tag.
+    value: ${{ steps.calculate.outputs.tag }}
   previous-tag:
     description: Previous valid release tag.
+    value: ${{ steps.calculate.outputs.previous-tag }}
   scheme:
     description: Release identifier scheme used for the result.
+    value: ${{ steps.calculate.outputs.scheme }}
   period:
     description: Rendered date portion used by the current period.
+    value: ${{ steps.calculate.outputs.period }}
   sequence:
     description: Zero-padded release sequence within the period.
+    value: ${{ steps.calculate.outputs.sequence }}
 
 runs:
-  using: node20
-  main: dist/index.js
+  using: composite
+  steps:
+    - name: Calculate next release
+      id: calculate
+      shell: bash
+      env:
+        INPUT_SCHEME: ${{ inputs.scheme }}
+        INPUT_PERIOD: ${{ inputs.period }}
+        INPUT_FORMAT: ${{ inputs.format }}
+      run: node "${{ github.action_path }}/dist/index.js"
