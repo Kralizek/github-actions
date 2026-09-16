@@ -165,14 +165,6 @@ if [ -n "$VERSION_INPUT" ]; then
       exit 1
     fi
 
-    if [ -n "$latest_tag" ]; then
-      latest_version="${latest_tag#"$TAG_PREFIX"}"
-      if version_greater_than "$latest_version" "$VERSION_INPUT"; then
-        echo "Explicit stable version $VERSION_INPUT cannot move backwards from latest stable release $latest_version." >&2
-        exit 1
-      fi
-    fi
-
     base_version="$VERSION_INPUT"
     next_version="$VERSION_INPUT"
     prerelease=false
@@ -218,6 +210,14 @@ else
     fi
   else
     base_version=$(calculate_base_from_tag "$latest_tag")
+  fi
+fi
+
+if [ -z "$CHANNEL" ] && [ -n "$latest_tag" ]; then
+  latest_version="${latest_tag#"$TAG_PREFIX"}"
+  if version_greater_than "$latest_version" "$next_version"; then
+    echo "Stable release $next_version cannot move backwards from latest stable release $latest_version." >&2
+    exit 1
   fi
 fi
 
