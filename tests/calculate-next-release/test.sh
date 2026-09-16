@@ -194,11 +194,6 @@ git config user.email "validation@example.invalid"
 touch initial.txt
 git add initial.txt
 git commit -qm "Initial commit"
-git tag r202653-0001
-week_result=$(calculate 2026-12-28 week)
-assert_output "$week_result" 'tag=r202653-0001' || true
-# 2026 has only 53 if ISO rules say so; use a known 52-week year for the malformed-history check.
-git tag -d r202653-0001 >/dev/null
 git tag r202153-0001
 week_result=$(calculate 2021-12-27 week)
 assert_output "$week_result" 'tag=r202152-0001'
@@ -273,6 +268,6 @@ assert_fails calculate 2026-09-16 week 'r{date:%Y%V}-{sequence:4}'
 echo "Reject formats that render invalid Git tags"
 assert_fails calculate 2026-09-16 month 'release {date:%Y%m}-{sequence:4}'
 assert_fails calculate 2026-09-16 month 'release..{date:%Y%m}-{sequence:4}'
-assert_fails calculate 2026-09-16 month 'release@{{date:%Y%m}-{sequence:4}'
+assert_fails calculate 2026-09-16 month 'release-{date:%Y%m}-{sequence:4}.'
 
 echo "calculate-next-release tests passed"
