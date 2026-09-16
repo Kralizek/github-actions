@@ -45,14 +45,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Validate explicit stable version
-      shell: bash
-      env:
-        CHANNEL: ${{ inputs.channel }}
-        VERSION_INPUT: ${{ inputs.version }}
-        TAG_PREFIX: ${{ inputs.tag-prefix }}
-      run: bash "${{ github.action_path }}/validate-stable-version.sh"
-
     - name: Calculate next release
       id: calculate
       shell: bash
