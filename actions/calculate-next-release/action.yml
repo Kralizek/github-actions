@@ -50,9 +50,9 @@ runs:
         INPUT_SCHEME: ${{ inputs.scheme }}
         INPUT_PERIOD: ${{ inputs.period }}
         INPUT_FORMAT: ${{ inputs.format }}
-      run: >-
-        deno run
-        --allow-run=git
-        --allow-env=INPUT_SCHEME,INPUT_PERIOD,INPUT_FORMAT,RELEASE_DATE,GITHUB_OUTPUT
-        --allow-write="${GITHUB_OUTPUT}"
-        "${{ github.action_path }}/index.ts"
+      run: |
+        deno run \
+          --allow-run=git \
+          --allow-env=INPUT_SCHEME,INPUT_PERIOD,INPUT_FORMAT,RELEASE_DATE,GITHUB_OUTPUT \
+          --allow-write="$GITHUB_OUTPUT" \
+          "${{ github.action_path }}/index.ts"
