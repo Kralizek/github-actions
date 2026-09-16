@@ -1,0 +1,58 @@
+name: Calculate next release
+description: Calculate the next repository release identifier from Git tags.
+
+inputs:
+  scheme:
+    description: Release identifier scheme. Currently only periodic is supported.
+    required: false
+    default: periodic
+  period:
+    description: Sequence reset boundary used by the periodic scheme: year, month, week, or day.
+    required: false
+    default: month
+  format:
+    description: Release format containing exactly one {date:...} token and one {sequence:N} token.
+    required: false
+    default: ''
+
+outputs:
+  release:
+    description: Calculated or reused release identifier.
+    value: ${{ steps.calculate.outputs.release }}
+  tag:
+    description: Calculated or reused release tag.
+    value: ${{ steps.calculate.outputs.tag }}
+  previous-tag:
+    description: Previous valid release tag.
+    value: ${{ steps.calculate.outputs.previous-tag }}
+  scheme:
+    description: Release identifier scheme used for the result.
+    value: ${{ steps.calculate.outputs.scheme }}
+  period:
+    description: Rendered date portion used by the current period.
+    value: ${{ steps.calculate.outputs.period }}
+  sequence:
+    description: Zero-padded release sequence within the period.
+    value: ${{ steps.calculate.outputs.sequence }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
+    - name: Calculate next release
+      id: calculate
+      shell: bash
+      env:
+        INPUT_SCHEME: ${{ inputs.scheme }}
+        INPUT_PERIOD: ${{ inputs.period }}
+        INPUT_FORMAT: ${{ inputs.format }}
+      run: |
+        deno run \
+          --allow-run=git \
+          --allow-env=INPUT_SCHEME,INPUT_PERIOD,INPUT_FORMAT,RELEASE_DATE,GITHUB_OUTPUT \
+          --allow-write="$GITHUB_OUTPUT" \
+          "${{ github.action_path }}/index.ts"

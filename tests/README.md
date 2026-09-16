@@ -1,23 +1,12 @@
 # Tests
 
-Bash-backed behavior is tested with small, self-contained suites under `tests/<suite>/test.sh`.
+Behavioral tests live under `tests/<suite>/test.sh`, and `tests/run.sh` discovers and executes every suite.
 
-Run all suites locally with:
+Tests should:
 
-```bash
-bash tests/run.sh
-```
+- be runnable locally with Bash;
+- create and clean up their own temporary fixtures;
+- exercise the public behavior of the action or workflow primitive they cover;
+- avoid depending on repository state outside their fixture.
 
-The runner discovers every `tests/*/test.sh` file. Each suite should:
-
-- use `set -euo pipefail`;
-- create and clean up its own temporary fixtures;
-- invoke the production script or action behavior directly;
-- fail with a non-zero exit code when an assertion fails;
-- avoid depending on execution order or state from another suite.
-
-When wrapping a command in a helper function, propagate its exit status explicitly. Bash disables some `set -e` behavior for functions evaluated as conditions, so negative tests should not rely on `errexit` alone.
-
-The release-calculation suite covers bootstrap behavior (default `0.1.0` and explicit `minimum-version`) as well as bumps after a stable baseline exists.
-
-The validation workflow also runs `bash -n` over shell scripts under both `actions/` and `tests/` before executing the suites.
+The validation workflow syntax-checks shell scripts before running the suites. It also installs Deno and type-checks the Deno-backed `calculate-next-release` action before its behavioral suite executes.

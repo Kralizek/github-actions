@@ -18,6 +18,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Validate action folder contract
         shell: bash
         run: |
@@ -106,6 +111,9 @@ jobs:
           while IFS= read -r -d '' script; do
             bash -n "$script"
           done < <(find actions tests -type f -name '*.sh' -print0)
+
+      - name: Type-check Deno action
+        run: deno check actions/calculate-next-release/index.ts
 
       - name: Run Bash tests
         shell: bash
