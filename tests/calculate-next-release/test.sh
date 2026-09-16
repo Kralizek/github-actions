@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-script="$root/actions/calculate-next-release/dist/index.js"
+script="$root/actions/calculate-next-release/index.ts"
 repository="$(mktemp -d)"
 trap 'rm -rf "$repository"' EXIT
 
@@ -27,7 +27,11 @@ calculate() {
     INPUT_FORMAT="$format" \
     RELEASE_DATE="$date" \
     GITHUB_OUTPUT="$output" \
-      node "$script" >/dev/null; then
+      deno run \
+        --allow-run=git \
+        --allow-env=INPUT_SCHEME,INPUT_PERIOD,INPUT_FORMAT,RELEASE_DATE,GITHUB_OUTPUT \
+        --allow-write="$output" \
+        "$script" >/dev/null; then
     status=0
   else
     status=$?
