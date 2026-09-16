@@ -28,12 +28,19 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function utcDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
 function isoWeek(date: Date): { year: number; week: number } {
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const year = d.getUTCFullYear();
-  const start = new Date(Date.UTC(year, 0, 1));
+  const start = utcDate(year, 1, 1);
   const week = Math.ceil((((d.getTime() - start.getTime()) / 86400000) + 1) / 7);
   return { year, week };
 }
@@ -112,17 +119,24 @@ function parseFormat(format: string, period: Period): CompiledFormat {
   if (dateMatches.length !== 1) fail('Release format must contain exactly one {date:...} token.');
   if (sequenceMatches.length !== 1) fail('Release format must contain exactly one {sequence:N} token with N from 1 to 9.');
 
-  const dateFormat = dateMatches[0][1];
-  const digits = Number(sequenceMatches[0][1]);
+  const dateMatch = dateMatches[0];
+  const sequenceMatch = sequenceMatches[0];
+  const dateFormat = dateMatch[1];
+  const digits = Number(sequenceMatch[1]);
   const dateRegex = compileDateFormat(dateFormat, period);
-  const datePlaceholder = '__DATE_TOKEN__';
-  const sequencePlaceholder = '__SEQUENCE_TOKEN__';
-  const skeleton = format
-    .replace(dateMatches[0][0], datePlaceholder)
-    .replace(sequenceMatches[0][0], sequencePlaceholder);
-  const regex = escapeRegex(skeleton)
-    .replace(escapeRegex(datePlaceholder), dateRegex)
-    .replace(escapeRegex(sequencePlaceholder), `(?<sequence>[0-9]{${digits}})`);
+  const parts = [
+    { start: dateMatch.index!, text: dateMatch[0], regex: dateRegex },
+    { start: sequenceMatch.index!, text: sequenceMatch[0], regex: `(?<sequence>[0-9]{${digits}})` },
+  ].sort((a, b) => a.start - b.start);
+
+  let cursor = 0;
+  let regex = '';
+  for (const part of parts) {
+    regex += escapeRegex(format.slice(cursor, part.start));
+    regex += part.regex;
+    cursor = part.start + part.text.length;
+  }
+  regex += escapeRegex(format.slice(cursor));
 
   return { format, dateFormat, digits, regex: new RegExp(`^${regex}$`) };
 }
@@ -136,6 +150,27 @@ function periodKey(groups: Record<string, string>, period: Period): number[] {
   }
 }
 
+function isValidPeriod(groups: Record<string, string>, period: Period): boolean {
+  switch (period) {
+    case 'year':
+    case 'month':
+      return true;
+    case 'day': {
+      const year = Number(groups.year);
+      const month = Number(groups.month);
+      const day = Number(groups.day);
+      const date = utcDate(year, month, day);
+      return date.getUTCFullYear() === year && date.getUTCMonth() + 1 === month && date.getUTCDate() === day;
+    }
+    case 'week': {
+      const year = Number(groups.isoYear);
+      const week = Number(groups.isoWeek);
+      const maxWeek = isoWeek(utcDate(year, 12, 28)).week;
+      return week <= maxWeek;
+    }
+  }
+}
+
 function compareKeys(a: number[], b: number[]): number {
   for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
     const diff = (a[i] ?? 0) - (b[i] ?? 0);
@@ -146,7 +181,7 @@ function compareKeys(a: number[], b: number[]): number {
 
 function parseTag(tag: string, compiled: CompiledFormat, period: Period): ParsedRelease | null {
   const match = compiled.regex.exec(tag);
-  if (!match?.groups) return null;
+  if (!match?.groups || !isValidPeriod(match.groups, period)) return null;
   const sequence = Number(match.groups.sequence);
   if (sequence <= 0) return null;
   return { tag, key: periodKey(match.groups, period), sequence };
@@ -156,16 +191,25 @@ function render(compiled: CompiledFormat, date: Date, sequence: number): string 
   const dateText = renderDateFormat(compiled.dateFormat, date);
   const sequenceText = String(sequence).padStart(compiled.digits, '0');
   return compiled.format
-    .replace(`{date:${compiled.dateFormat}}`, dateText)
-    .replace(`{sequence:${compiled.digits}}`, sequenceText);
+    .replace(`{date:${compiled.dateFormat}}`, () => dateText)
+    .replace(`{sequence:${compiled.digits}}`, () => sequenceText);
+}
+
+function gitResult(...args: string[]): Deno.CommandOutput {
+  return new Deno.Command('git', { args, stdout: 'piped', stderr: 'piped' }).outputSync();
 }
 
 function git(...args: string[]): string {
-  const result = new Deno.Command('git', { args, stdout: 'piped', stderr: 'piped' }).outputSync();
+  const result = gitResult(...args);
   if (!result.success) {
     fail(new TextDecoder().decode(result.stderr).trim() || `git ${args.join(' ')} failed`);
   }
   return new TextDecoder().decode(result.stdout).trim();
+}
+
+function ensureValidTag(tag: string): void {
+  const result = gitResult('check-ref-format', `refs/tags/${tag}`);
+  if (!result.success) fail(`Rendered release is not a valid Git tag: ${tag}`);
 }
 
 function appendOutput(key: string, value: string): void {
@@ -179,7 +223,7 @@ function main(): void {
   if (scheme !== 'periodic') fail(`Unsupported release scheme: ${scheme}`);
 
   const periodInput = input('period', 'month');
-  if (!(periodInput in requiredTokens)) fail(`Unsupported period: ${periodInput}`);
+  if (!Object.hasOwn(requiredTokens, periodInput)) fail(`Unsupported period: ${periodInput}`);
   const period = periodInput as Period;
   const format = input('format', defaultFormats[period]);
   const compiled = parseFormat(format, period);
@@ -198,7 +242,6 @@ function main(): void {
   parsed.sort((a, b) => compareKeys(a.key, b.key) || a.sequence - b.sequence);
   const latest = parsed.at(-1) ?? null;
 
-  const head = git('rev-parse', 'HEAD');
   const tagsOnHead = new Set(git('tag', '--points-at', 'HEAD').split('\n').filter(Boolean));
   const currentOnHead = parsed.filter(item => tagsOnHead.has(item.tag) && compareKeys(item.key, currentKey) === 0);
   if (currentOnHead.length > 1) fail(`Multiple periodic release tags for current period point to HEAD: ${currentOnHead.map(x => x.tag).join(' ')}`);
@@ -214,7 +257,8 @@ function main(): void {
     tag = candidate.tag;
     sequence = candidate.sequence;
     reused = true;
-    previousTag = parsed.filter(item => item.tag !== candidate.tag && git('rev-list', '-n', '1', item.tag) !== head).at(-1)?.tag ?? '';
+    const candidateIndex = parsed.findIndex(item => item.tag === candidate.tag);
+    previousTag = candidateIndex > 0 ? parsed[candidateIndex - 1].tag : '';
   } else {
     if (latest && compareKeys(latest.key, currentKey) > 0) fail(`Cannot move periodic release period backwards from ${latest.tag} to ${renderedPeriod}.`);
     sequence = latest && compareKeys(latest.key, currentKey) === 0 ? latest.sequence + 1 : 1;
@@ -223,6 +267,8 @@ function main(): void {
     tag = render(compiled, now, sequence);
     if (tagList.includes(tag)) fail(`Tag ${tag} already exists unexpectedly.`);
   }
+
+  ensureValidTag(tag);
 
   const sequenceText = String(sequence).padStart(compiled.digits, '0');
   console.log(reused ? `Reusing release tag on HEAD: ${tag}` : `Next release: ${tag}`);
