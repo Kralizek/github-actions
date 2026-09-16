@@ -38,6 +38,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Setup Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
     - name: Calculate next release
       id: calculate
       shell: bash
@@ -45,4 +50,9 @@ runs:
         INPUT_SCHEME: ${{ inputs.scheme }}
         INPUT_PERIOD: ${{ inputs.period }}
         INPUT_FORMAT: ${{ inputs.format }}
-      run: node "${{ github.action_path }}/dist/index.js"
+      run: >-
+        deno run
+        --allow-run=git
+        --allow-env=INPUT_SCHEME,INPUT_PERIOD,INPUT_FORMAT,RELEASE_DATE,GITHUB_OUTPUT
+        --allow-write="${GITHUB_OUTPUT}"
+        "${{ github.action_path }}/index.ts"
