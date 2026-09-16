@@ -10,7 +10,7 @@ inputs:
     required: false
     default: ''
   version:
-    description: Optional explicit SemVer version override. Leave empty to derive the version from Git tags.
+    description: Optional explicit SemVer version. Overrides calculation but still obeys release policy.
     required: false
     default: ''
   minimum-version:
