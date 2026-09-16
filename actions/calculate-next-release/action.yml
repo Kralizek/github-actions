@@ -9,6 +9,10 @@ inputs:
     description: Optional prerelease channel, for example alpha, beta, or rc.
     required: false
     default: ''
+  version:
+    description: Optional explicit SemVer version override. Leave empty to derive the version from Git tags.
+    required: false
+    default: ''
   minimum-version:
     description: Optional stable SemVer floor. Also replaces the default 0.1.0 bootstrap target when no stable tag exists.
     required: false
@@ -47,6 +51,7 @@ runs:
       env:
         BUMP: ${{ inputs.bump }}
         CHANNEL: ${{ inputs.channel }}
+        VERSION_INPUT: ${{ inputs.version }}
         MINIMUM_VERSION: ${{ inputs.minimum-version }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
       run: bash "${{ github.action_path }}/calculate.sh"
