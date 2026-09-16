@@ -18,11 +18,13 @@ calculate() {
   local bump="$1"
   local channel="${2:-}"
   local minimum_version="${3:-}"
+  local version_input="${4:-}"
   local output status
   output=$(mktemp)
 
   if BUMP="$bump" \
     CHANNEL="$channel" \
+    VERSION_INPUT="$version_input" \
     MINIMUM_VERSION="$minimum_version" \
     TAG_PREFIX="v" \
     GITHUB_OUTPUT="$output" \
@@ -76,7 +78,50 @@ echo "Bootstrap prerelease from minimum version"
 bootstrap_rc_output=$(calculate major rc 2.0.0)
 assert_output "$bootstrap_rc_output" 'version=2.0.0-rc.1'
 
+echo "Use explicit stable version"
+explicit_stable_output=$(calculate minor '' '' 2.5.0)
+assert_output "$explicit_stable_output" 'base-version=2.5.0'
+assert_output "$explicit_stable_output" 'version=2.5.0'
+assert_output "$explicit_stable_output" 'tag=v2.5.0'
+assert_output "$explicit_stable_output" 'prerelease=false'
+assert_output "$explicit_stable_output" 'channel='
+
+echo "Use explicit prerelease version"
+explicit_rc_output=$(calculate minor rc '' 2.5.0-rc.7)
+assert_output "$explicit_rc_output" 'base-version=2.5.0'
+assert_output "$explicit_rc_output" 'version=2.5.0-rc.7'
+assert_output "$explicit_rc_output" 'tag=v2.5.0-rc.7'
+assert_output "$explicit_rc_output" 'prerelease=true'
+assert_output "$explicit_rc_output" 'channel=rc'
+
+echo "Reject explicit versions that do not match the selected channel"
+assert_fails calculate minor '' '' 2.5.0-rc.1
+assert_fails calculate minor rc '' 2.5.0
+assert_fails calculate minor rc '' 2.5.0-beta.1
+assert_fails calculate minor rc '' 2.5.0-rc.01
+assert_fails calculate minor rc '' 02.5.0-rc.1
+
 git tag v1.2.3
+
+echo "Stable patch release"
+patch_output=$(calculate patch)
+assert_output "$patch_output" 'version=1.2.3'
+assert_output "$patch_output" 'tag=v1.2.3'
+assert_output "$patch_output" 'previous-tag=v1.2.3'
+assert_output "$patch_output" 'base-version=1.2.3'
+assert_output "$patch_output" 'prerelease=false'
+assert_output "$patch_output" 'channel='
+
+echo "Stable tag on HEAD is reused regardless of requested bump"
+minor_reuse_output=$(calculate minor)
+assert_output "$minor_reuse_output" 'version=1.2.3'
+major_reuse_output=$(calculate major)
+assert_output "$major_reuse_output" 'version=1.2.3'
+
+echo "Advance past the stable release commit"
+echo after-stable > initial.txt
+git add initial.txt
+git commit -qm "Advance past stable release"
 
 echo "Stable patch release"
 patch_output=$(calculate patch)
@@ -170,10 +215,25 @@ stable_from_prerelease_output=$(calculate minor)
 assert_output "$stable_from_prerelease_output" 'version=1.3.0'
 assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
 
-echo "A stable release advances the baseline, leaving later bases available"
+echo "A stable release is idempotent on the tagged commit"
 git tag v1.3.0
+stable_rerun_output=$(calculate minor)
+assert_output "$stable_rerun_output" 'version=1.3.0'
+assert_output "$stable_rerun_output" 'tag=v1.3.0'
+explicit_stable_rerun_output=$(calculate minor '' '' 1.3.0)
+assert_output "$explicit_stable_rerun_output" 'version=1.3.0'
+
+echo "A stable release advances the baseline, leaving later bases available"
 later_prerelease_output=$(calculate minor rc)
 assert_output "$later_prerelease_output" 'version=1.4.0-rc.1'
+
+echo "Advance beyond stable tag"
+echo after-v1.3.0 > initial.txt
+git add initial.txt
+git commit -qm "Advance beyond v1.3.0"
+
+echo "An explicit version cannot reuse a tag from another commit"
+assert_fails calculate minor '' '' 1.3.0
 
 echo "Ignore malformed stable tags"
 git tag v01.9.9
