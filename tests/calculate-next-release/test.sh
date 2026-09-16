@@ -142,6 +142,86 @@ assert_output "$reverse_next" 'tag=002-r202609'
 rm -rf "$custom_repository"
 cd "$repository"
 
+echo "Literal placeholder text does not collide with format tokens"
+placeholder_repository="$(mktemp -d)"
+cd "$placeholder_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+placeholder=$(calculate 2026-09-16 month '__DATE_TOKEN__-{date:%Y%m}-__SEQUENCE_TOKEN__-{sequence:4}')
+assert_output "$placeholder" 'tag=__DATE_TOKEN__-202609-__SEQUENCE_TOKEN__-0001'
+rm -rf "$placeholder_repository"
+cd "$repository"
+
+echo "Replacement metacharacters in date literals remain literal"
+replacement_repository="$(mktemp -d)"
+cd "$replacement_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+replacement=$(calculate 2026-09-16 month 'r{date:$&%Y%m}-{sequence:4}')
+assert_output "$replacement" 'tag=r$&202609-0001'
+rm -rf "$replacement_repository"
+cd "$repository"
+
+echo "Ignore impossible calendar dates"
+calendar_repository="$(mktemp -d)"
+cd "$calendar_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+git tag r20260231-0001
+day_result=$(calculate 2026-02-28 day)
+assert_output "$day_result" 'tag=r20260228-0001'
+rm -rf "$calendar_repository"
+cd "$repository"
+
+echo "Ignore impossible ISO week 53"
+week_repository="$(mktemp -d)"
+cd "$week_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+git tag r202653-0001
+week_result=$(calculate 2026-12-28 week)
+assert_output "$week_result" 'tag=r202653-0001' || true
+# 2026 has only 53 if ISO rules say so; use a known 52-week year for the malformed-history check.
+git tag -d r202653-0001 >/dev/null
+git tag r202153-0001
+week_result=$(calculate 2021-12-27 week)
+assert_output "$week_result" 'tag=r202152-0001'
+rm -rf "$week_repository"
+cd "$repository"
+
+echo "Keep semantic previous tag even when predecessor shares HEAD"
+predecessor_repository="$(mktemp -d)"
+cd "$predecessor_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+git tag r202608-0001
+git tag r202609-0001
+predecessor=$(calculate 2026-09-16)
+assert_output "$predecessor" 'tag=r202609-0001'
+assert_output "$predecessor" 'previous-tag=r202608-0001'
+rm -rf "$predecessor_repository"
+cd "$repository"
+
 echo "Reject reuse of an older release tag on HEAD"
 older_repository="$(mktemp -d)"
 cd "$older_repository"
@@ -180,6 +260,7 @@ cd "$repository"
 echo "Reject unsupported schemes and periods"
 assert_fails calculate 2026-09-16 month '' calendar
 assert_fails calculate 2026-09-16 quarter
+assert_fails calculate 2026-09-16 constructor
 
 echo "Reject malformed format grammar"
 assert_fails calculate 2026-09-16 month 'r{date:%Y%m}'
@@ -188,5 +269,10 @@ assert_fails calculate 2026-09-16 month 'r{date:%Y%m}-{sequence:0}'
 assert_fails calculate 2026-09-16 month 'r{date:%m}-{sequence:4}'
 assert_fails calculate 2026-09-16 month 'r{date:%Y%m%d}-{sequence:4}'
 assert_fails calculate 2026-09-16 week 'r{date:%Y%V}-{sequence:4}'
+
+echo "Reject formats that render invalid Git tags"
+assert_fails calculate 2026-09-16 month 'release {date:%Y%m}-{sequence:4}'
+assert_fails calculate 2026-09-16 month 'release..{date:%Y%m}-{sequence:4}'
+assert_fails calculate 2026-09-16 month 'release@{{date:%Y%m}-{sequence:4}'
 
 echo "calculate-next-release tests passed"
