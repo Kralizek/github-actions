@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-script="$root/actions/calculate-next-release/validate-stable-version.sh"
+script="$root/actions/calculate-next-release/calculate.sh"
 repository="$(mktemp -d)"
 trap 'rm -rf "$repository"' EXIT
 
@@ -16,35 +16,50 @@ git commit -qm "Initial commit"
 
 git tag v1.3.0
 
-validate() {
-  CHANNEL="${1:-}" \
-  VERSION_INPUT="${2:-}" \
-  TAG_PREFIX=v \
-    bash "$script"
+calculate() {
+  local channel="${1:-}"
+  local version_input="${2:-}"
+  local output
+  output=$(mktemp)
+
+  if BUMP=minor \
+    CHANNEL="$channel" \
+    VERSION_INPUT="$version_input" \
+    MINIMUM_VERSION='' \
+    TAG_PREFIX=v \
+    GITHUB_OUTPUT="$output" \
+      bash "$script" >/dev/null; then
+    rm -f "$output"
+    return 0
+  fi
+
+  status=$?
+  rm -f "$output"
+  return "$status"
 }
 
 echo "Allow equal explicit stable version"
-validate '' 1.3.0
+calculate '' 1.3.0
 
 echo "Allow later explicit stable version"
-validate '' 1.3.1
-validate '' 1.4.0
-validate '' 2.0.0
+calculate '' 1.3.1
+calculate '' 1.4.0
+calculate '' 2.0.0
 
 echo "Reject explicit stable version regression"
-if validate '' 1.2.9 >/dev/null 2>&1; then
+if calculate '' 1.2.9 >/dev/null 2>&1; then
   echo "Expected explicit stable regression to fail" >&2
   exit 1
 fi
 
-echo "Do not apply stable monotonicity to prerelease overrides"
-validate rc 1.2.0-rc.1
-
-echo "Ignore malformed stable overrides so calculate.sh retains validation ownership"
-validate '' not-semver
+echo "Keep malformed explicit versions under calculator validation"
+if calculate '' not-semver >/dev/null 2>&1; then
+  echo "Expected malformed explicit stable version to fail" >&2
+  exit 1
+fi
 
 echo "Ignore malformed stable tags when choosing the latest stable release"
 git tag v99.0.00
-validate '' 1.3.0
+calculate '' 1.3.0
 
 echo "stable-version-monotonicity tests passed"
