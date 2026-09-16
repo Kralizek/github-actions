@@ -13,6 +13,20 @@ type ParsedRelease = {
   sequence: number;
 };
 
+type ReleaseResult = {
+  release: string;
+  tag: string;
+  'previous-tag': string;
+  scheme: string;
+  period?: string;
+  sequence?: string;
+};
+
+type ReleaseScheme = {
+  name: string;
+  calculate(): ReleaseResult;
+};
+
 function input(name: string, fallback = ''): string {
   const key = `INPUT_${name.replace(/-/g, '_').toUpperCase()}`;
   const value = Deno.env.get(key);
@@ -212,6 +226,75 @@ function ensureValidTag(tag: string): void {
   if (!result.success) fail(`Rendered release is not a valid Git tag: ${tag}`);
 }
 
+const periodicScheme: ReleaseScheme = {
+  name: 'periodic',
+  calculate(): ReleaseResult {
+    const periodInput = input('period', 'month');
+    if (!Object.hasOwn(requiredTokens, periodInput)) fail(`Unsupported period: ${periodInput}`);
+    const period = periodInput as Period;
+    const format = input('format', defaultFormats[period]);
+    const compiled = parseFormat(format, period);
+
+    const releaseDate = Deno.env.get('RELEASE_DATE');
+    const now = releaseDate ? new Date(`${releaseDate}T00:00:00Z`) : new Date();
+    if (Number.isNaN(now.getTime())) fail(`Invalid RELEASE_DATE: ${releaseDate}`);
+
+    const renderedPeriod = renderDateFormat(compiled.dateFormat, now);
+    const currentProbe = compiled.regex.exec(render(compiled, now, 1));
+    if (!currentProbe?.groups) fail('Internal error while evaluating release format.');
+    const currentKey = periodKey(currentProbe.groups, period);
+
+    const tagList = git('tag', '-l').split('\n').filter(Boolean);
+    const parsed = tagList.map(tag => parseTag(tag, compiled, period)).filter((x): x is ParsedRelease => x !== null);
+    parsed.sort((a, b) => compareKeys(a.key, b.key) || a.sequence - b.sequence);
+    const latest = parsed.at(-1) ?? null;
+
+    const tagsOnHead = new Set(git('tag', '--points-at', 'HEAD').split('\n').filter(Boolean));
+    const currentOnHead = parsed.filter(item => tagsOnHead.has(item.tag) && compareKeys(item.key, currentKey) === 0);
+    if (currentOnHead.length > 1) fail(`Multiple periodic release tags for current period point to HEAD: ${currentOnHead.map(x => x.tag).join(' ')}`);
+
+    let tag: string;
+    let sequence: number;
+    let previousTag = latest?.tag ?? '';
+    let reused = false;
+
+    if (currentOnHead.length === 1) {
+      const candidate = currentOnHead[0];
+      if (!latest || candidate.tag !== latest.tag) fail(`Cannot reuse ${candidate.tag} because latest periodic release is ${latest?.tag ?? 'none'}.`);
+      tag = candidate.tag;
+      sequence = candidate.sequence;
+      reused = true;
+      const candidateIndex = parsed.findIndex(item => item.tag === candidate.tag);
+      previousTag = candidateIndex > 0 ? parsed[candidateIndex - 1].tag : '';
+    } else {
+      if (latest && compareKeys(latest.key, currentKey) > 0) fail(`Cannot move periodic release period backwards from ${latest.tag} to ${renderedPeriod}.`);
+      sequence = latest && compareKeys(latest.key, currentKey) === 0 ? latest.sequence + 1 : 1;
+      const max = 10 ** compiled.digits - 1;
+      if (sequence > max) fail(`Periodic release sequence exhausted for ${renderedPeriod} with ${compiled.digits} digits.`);
+      tag = render(compiled, now, sequence);
+      if (tagList.includes(tag)) fail(`Tag ${tag} already exists unexpectedly.`);
+    }
+
+    ensureValidTag(tag);
+
+    const sequenceText = String(sequence).padStart(compiled.digits, '0');
+    console.log(reused ? `Reusing release tag on HEAD: ${tag}` : `Next release: ${tag}`);
+
+    return {
+      release: tag,
+      tag,
+      'previous-tag': previousTag,
+      scheme: periodicScheme.name,
+      period: renderedPeriod,
+      sequence: sequenceText,
+    };
+  },
+};
+
+const schemes = new Map<string, ReleaseScheme>([
+  [periodicScheme.name, periodicScheme],
+]);
+
 function appendOutput(key: string, value: string): void {
   const output = Deno.env.get('GITHUB_OUTPUT');
   if (!output) fail('GITHUB_OUTPUT must be set.');
@@ -219,69 +302,14 @@ function appendOutput(key: string, value: string): void {
 }
 
 function main(): void {
-  const scheme = input('scheme', 'periodic');
-  if (scheme !== 'periodic') fail(`Unsupported release scheme: ${scheme}`);
+  const schemeName = input('scheme', periodicScheme.name);
+  const scheme = schemes.get(schemeName);
+  if (!scheme) fail(`Unsupported release scheme: ${schemeName}`);
 
-  const periodInput = input('period', 'month');
-  if (!Object.hasOwn(requiredTokens, periodInput)) fail(`Unsupported period: ${periodInput}`);
-  const period = periodInput as Period;
-  const format = input('format', defaultFormats[period]);
-  const compiled = parseFormat(format, period);
-
-  const releaseDate = Deno.env.get('RELEASE_DATE');
-  const now = releaseDate ? new Date(`${releaseDate}T00:00:00Z`) : new Date();
-  if (Number.isNaN(now.getTime())) fail(`Invalid RELEASE_DATE: ${releaseDate}`);
-
-  const renderedPeriod = renderDateFormat(compiled.dateFormat, now);
-  const currentProbe = compiled.regex.exec(render(compiled, now, 1));
-  if (!currentProbe?.groups) fail('Internal error while evaluating release format.');
-  const currentKey = periodKey(currentProbe.groups, period);
-
-  const tagList = git('tag', '-l').split('\n').filter(Boolean);
-  const parsed = tagList.map(tag => parseTag(tag, compiled, period)).filter((x): x is ParsedRelease => x !== null);
-  parsed.sort((a, b) => compareKeys(a.key, b.key) || a.sequence - b.sequence);
-  const latest = parsed.at(-1) ?? null;
-
-  const tagsOnHead = new Set(git('tag', '--points-at', 'HEAD').split('\n').filter(Boolean));
-  const currentOnHead = parsed.filter(item => tagsOnHead.has(item.tag) && compareKeys(item.key, currentKey) === 0);
-  if (currentOnHead.length > 1) fail(`Multiple periodic release tags for current period point to HEAD: ${currentOnHead.map(x => x.tag).join(' ')}`);
-
-  let tag: string;
-  let sequence: number;
-  let previousTag = latest?.tag ?? '';
-  let reused = false;
-
-  if (currentOnHead.length === 1) {
-    const candidate = currentOnHead[0];
-    if (!latest || candidate.tag !== latest.tag) fail(`Cannot reuse ${candidate.tag} because latest periodic release is ${latest?.tag ?? 'none'}.`);
-    tag = candidate.tag;
-    sequence = candidate.sequence;
-    reused = true;
-    const candidateIndex = parsed.findIndex(item => item.tag === candidate.tag);
-    previousTag = candidateIndex > 0 ? parsed[candidateIndex - 1].tag : '';
-  } else {
-    if (latest && compareKeys(latest.key, currentKey) > 0) fail(`Cannot move periodic release period backwards from ${latest.tag} to ${renderedPeriod}.`);
-    sequence = latest && compareKeys(latest.key, currentKey) === 0 ? latest.sequence + 1 : 1;
-    const max = 10 ** compiled.digits - 1;
-    if (sequence > max) fail(`Periodic release sequence exhausted for ${renderedPeriod} with ${compiled.digits} digits.`);
-    tag = render(compiled, now, sequence);
-    if (tagList.includes(tag)) fail(`Tag ${tag} already exists unexpectedly.`);
+  const result = scheme.calculate();
+  for (const [key, value] of Object.entries(result)) {
+    if (value != null) appendOutput(key, value);
   }
-
-  ensureValidTag(tag);
-
-  const sequenceText = String(sequence).padStart(compiled.digits, '0');
-  console.log(reused ? `Reusing release tag on HEAD: ${tag}` : `Next release: ${tag}`);
-
-  const outputs: Record<string, string> = {
-    release: tag,
-    tag,
-    'previous-tag': previousTag,
-    scheme,
-    period: renderedPeriod,
-    sequence: sequenceText,
-  };
-  for (const [key, value] of Object.entries(outputs)) appendOutput(key, value);
 }
 
 main();
