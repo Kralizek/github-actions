@@ -7,52 +7,28 @@ inputs:
     required: false
     default: periodic
   period:
-    description: Period boundary used by the periodic scheme: year, month, week, or day.
+    description: Sequence reset boundary used by the periodic scheme: year, month, week, or day.
     required: false
     default: month
-  period-format:
-    description: Optional strftime-style format for the period label. Defaults depend on period.
+  format:
+    description: Release format containing exactly one {date:...} token and one {sequence:N} token.
     required: false
     default: ''
-  digits:
-    description: Number of zero-padded digits used by the sequence.
-    required: false
-    default: '4'
-  tag-prefix:
-    description: Prefix used by release tags.
-    required: false
-    default: r
 
 outputs:
   release:
-    description: Calculated or reused release identifier without the tag prefix.
-    value: ${{ steps.calculate.outputs.release }}
+    description: Calculated or reused release identifier.
   tag:
-    description: Calculated or reused release tag including the configured prefix.
-    value: ${{ steps.calculate.outputs.tag }}
+    description: Calculated or reused release tag.
   previous-tag:
     description: Previous valid release tag.
-    value: ${{ steps.calculate.outputs.previous-tag }}
   scheme:
     description: Release identifier scheme used for the result.
-    value: ${{ steps.calculate.outputs.scheme }}
   period:
-    description: Rendered period label used by the release identifier.
-    value: ${{ steps.calculate.outputs.period }}
+    description: Rendered date portion used by the current period.
   sequence:
     description: Zero-padded release sequence within the period.
-    value: ${{ steps.calculate.outputs.sequence }}
 
 runs:
-  using: composite
-  steps:
-    - name: Calculate next release
-      id: calculate
-      shell: bash
-      env:
-        SCHEME: ${{ inputs.scheme }}
-        PERIOD: ${{ inputs.period }}
-        PERIOD_FORMAT: ${{ inputs.period-format }}
-        DIGITS: ${{ inputs.digits }}
-        TAG_PREFIX: ${{ inputs.tag-prefix }}
-      run: bash "${{ github.action_path }}/calculate.sh"
+  using: node20
+  main: dist/index.js
