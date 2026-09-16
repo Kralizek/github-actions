@@ -3,9 +3,21 @@ description: Calculate the next repository release identifier from Git tags.
 
 inputs:
   scheme:
-    description: Release identifier scheme. Currently only calendar is supported.
+    description: Release identifier scheme. Currently only periodic is supported.
     required: false
-    default: calendar
+    default: periodic
+  period:
+    description: Period boundary used by the periodic scheme: year, month, week, or day.
+    required: false
+    default: month
+  period-format:
+    description: Optional strftime-style format for the period label. Defaults depend on period.
+    required: false
+    default: ''
+  digits:
+    description: Number of zero-padded digits used by the sequence.
+    required: false
+    default: '4'
   tag-prefix:
     description: Prefix used by release tags.
     required: false
@@ -25,10 +37,10 @@ outputs:
     description: Release identifier scheme used for the result.
     value: ${{ steps.calculate.outputs.scheme }}
   period:
-    description: Calendar release period in YYYYMM form.
+    description: Rendered period label used by the release identifier.
     value: ${{ steps.calculate.outputs.period }}
   sequence:
-    description: Four-digit release sequence within the period.
+    description: Zero-padded release sequence within the period.
     value: ${{ steps.calculate.outputs.sequence }}
 
 runs:
@@ -39,5 +51,8 @@ runs:
       shell: bash
       env:
         SCHEME: ${{ inputs.scheme }}
+        PERIOD: ${{ inputs.period }}
+        PERIOD_FORMAT: ${{ inputs.period-format }}
+        DIGITS: ${{ inputs.digits }}
         TAG_PREFIX: ${{ inputs.tag-prefix }}
       run: bash "${{ github.action_path }}/calculate.sh"
