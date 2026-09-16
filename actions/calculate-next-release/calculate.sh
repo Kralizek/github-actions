@@ -213,6 +213,14 @@ else
   fi
 fi
 
+if [ -z "$CHANNEL" ] && [ -n "$latest_tag" ]; then
+  latest_version="${latest_tag#"$TAG_PREFIX"}"
+  if version_greater_than "$latest_version" "$next_version"; then
+    echo "Stable release $next_version cannot move backwards from latest stable release $latest_version." >&2
+    exit 1
+  fi
+fi
+
 if [ -n "$CHANNEL" ]; then
   stable_base_tag="${TAG_PREFIX}${base_version}"
   if git rev-parse -q --verify "refs/tags/${stable_base_tag}" >/dev/null; then
