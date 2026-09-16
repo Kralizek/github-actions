@@ -19,7 +19,7 @@ git tag v1.3.0
 calculate() {
   local channel="${1:-}"
   local version_input="${2:-}"
-  local output
+  local output status
   output=$(mktemp)
 
   if BUMP=minor \
@@ -29,11 +29,11 @@ calculate() {
     TAG_PREFIX=v \
     GITHUB_OUTPUT="$output" \
       bash "$script" >/dev/null; then
-    rm -f "$output"
-    return 0
+    status=0
+  else
+    status=$?
   fi
 
-  status=$?
   rm -f "$output"
   return "$status"
 }
