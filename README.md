@@ -18,7 +18,7 @@ The goal of this repository is to centralize automation that is genuinely common
 | Action | Description |
 |---|---|
 | [Calculate next version](actions/calculate-next-version/README.md) | Calculates the next stable or channel-based prerelease SemVer version from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
-| [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers. The default calendar scheme uses monthly `rYYYYMM-NNNN` tags. |
+| [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers. The default periodic scheme uses monthly `rYYYYMM-NNNN` tags and can vary the period, period format, and sequence width. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 
