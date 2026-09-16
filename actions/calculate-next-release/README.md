@@ -66,4 +66,4 @@ Periodic releases are globally monotonic. If the latest matching release belongs
 
 The periodic scheme uses the runner's UTC date. The implementation accepts an internal `RELEASE_DATE=YYYY-MM-DD` environment override for deterministic tests; this is not an action input.
 
-The action is a composite action that installs Deno 2.x with `denoland/setup-deno` and runs the single `index.ts` entrypoint directly. There is no Node runtime declaration, package installation, transpilation step, or checked-in generated JavaScript artifact.
+The action is a composite action that installs the current Deno 2.x release with `denoland/setup-deno` and runs the single `index.ts` entrypoint directly. There is no Node runtime declaration, package installation, transpilation step, or checked-in generated JavaScript artifact. Following Deno 2.x runtime updates therefore does not require publishing a new version of this action.
