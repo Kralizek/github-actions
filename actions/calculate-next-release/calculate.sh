@@ -98,8 +98,8 @@ period="${PERIOD_VALUE:-$(date -u +"$period_format")}"
 
 escaped_format=$(printf '%s' "$period_format" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
 period_regex="$escaped_format"
-period_regex="${period_regex//%Y/[0-9]{4}}"
-period_regex="${period_regex//%G/[0-9]{4}}"
+period_regex="${period_regex//%Y/[0-9][0-9][0-9][0-9]}"
+period_regex="${period_regex//%G/[0-9][0-9][0-9][0-9]}"
 period_regex="${period_regex//%m/(0[1-9]|1[0-2])}"
 period_regex="${period_regex//%d/(0[1-9]|[12][0-9]|3[01])}"
 period_regex="${period_regex//%V/(0[1-9]|[1-4][0-9]|5[0-3])}"
