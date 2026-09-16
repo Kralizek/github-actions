@@ -55,41 +55,34 @@ validate_period_format() {
       }
       ;;
     month)
-      [[ "$format" == *%Y* && "$format" == *%m* ]] || { echo "Month period format must contain %Y and %m." >&2; exit 1; }
+      [[ "$format" == *%Y*%m* ]] || {
+        echo "Month period format must contain %Y before %m so labels sort chronologically." >&2
+        exit 1
+      }
       [[ "$format" != *%d* && "$format" != *%G* && "$format" != *%V* ]] || {
         echo "Month period format cannot contain day or week tokens." >&2
         exit 1
       }
-      [[ "${format%%\%Y*}" != "$format" && "${format%%\%m*}" != "$format" ]] || exit 1
-      if (( ${#format%%\%Y*} > ${#format%%\%m*} )); then
-        echo "Month period format must place %Y before %m so labels sort chronologically." >&2
-        exit 1
-      fi
       ;;
     week)
-      [[ "$format" == *%G* && "$format" == *%V* ]] || { echo "Week period format must contain %G and %V." >&2; exit 1; }
+      [[ "$format" == *%G*%V* ]] || {
+        echo "Week period format must contain %G before %V so labels sort chronologically." >&2
+        exit 1
+      }
       [[ "$format" != *%Y* && "$format" != *%m* && "$format" != *%d* ]] || {
         echo "Week period format must use ISO week-year/week tokens only." >&2
         exit 1
       }
-      if (( ${#format%%\%G*} > ${#format%%\%V*} )); then
-        echo "Week period format must place %G before %V so labels sort chronologically." >&2
-        exit 1
-      fi
       ;;
     day)
-      [[ "$format" == *%Y* && "$format" == *%m* && "$format" == *%d* ]] || { echo "Day period format must contain %Y, %m, and %d." >&2; exit 1; }
+      [[ "$format" == *%Y*%m*%d* ]] || {
+        echo "Day period format must contain %Y, %m, and %d in chronological order." >&2
+        exit 1
+      }
       [[ "$format" != *%G* && "$format" != *%V* ]] || {
         echo "Day period format cannot contain week tokens." >&2
         exit 1
       }
-      year_pos=${#format%%\%Y*}
-      month_pos=${#format%%\%m*}
-      day_pos=${#format%%\%d*}
-      if (( year_pos > month_pos || month_pos > day_pos )); then
-        echo "Day period format must place %Y, %m, and %d in chronological order." >&2
-        exit 1
-      fi
       ;;
   esac
 }
