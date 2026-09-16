@@ -13,14 +13,7 @@ type ParsedRelease = {
   sequence: number;
 };
 
-type ReleaseResult = {
-  release: string;
-  tag: string;
-  'previous-tag': string;
-  scheme: string;
-  period?: string;
-  sequence?: string;
-};
+type ReleaseResult = Record<string, string>;
 
 type ReleaseScheme = {
   name: string;
@@ -306,9 +299,8 @@ function main(): void {
   const scheme = schemes.get(schemeName);
   if (!scheme) fail(`Unsupported release scheme: ${schemeName}`);
 
-  const result = scheme.calculate();
-  for (const [key, value] of Object.entries(result)) {
-    if (value != null) appendOutput(key, value);
+  for (const [key, value] of Object.entries(scheme.calculate())) {
+    appendOutput(key, value);
   }
 }
 
