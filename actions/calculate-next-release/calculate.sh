@@ -29,6 +29,103 @@ version_greater_than() {
   (( left_patch > right_patch ))
 }
 
+increment_version() {
+  local version="$1"
+  local major minor patch
+
+  IFS=. read -r major minor patch <<< "$version"
+
+  case "$BUMP" in
+    patch)
+      patch=$((patch + 1))
+      ;;
+    minor)
+      minor=$((minor + 1))
+      patch=0
+      ;;
+    major)
+      major=$((major + 1))
+      minor=0
+      patch=0
+      ;;
+  esac
+
+  printf '%s.%s.%s\n' "$major" "$minor" "$patch"
+}
+
+apply_minimum_version() {
+  local version="$1"
+
+  if [ -n "$MINIMUM_VERSION" ] && version_greater_than "$MINIMUM_VERSION" "$version"; then
+    printf '%s\n' "$MINIMUM_VERSION"
+  else
+    printf '%s\n' "$version"
+  fi
+}
+
+calculate_base_from_tag() {
+  local tag="$1"
+
+  if [ -z "$tag" ]; then
+    printf '%s\n' "${MINIMUM_VERSION:-0.1.0}"
+  else
+    apply_minimum_version "$(increment_version "${tag#"$TAG_PREFIX"}")"
+  fi
+}
+
+find_latest_stable_tag() {
+  git tag -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname \
+    | grep -E "^${escaped_prefix}${stable_version_pattern}$" \
+    | head -n 1 \
+    || true
+}
+
+find_latest_stable_tag_excluding_head() {
+  local head_commit tag tag_commit
+  head_commit=$(git rev-parse HEAD)
+
+  while IFS= read -r tag; do
+    tag_commit=$(git rev-list -n 1 "$tag")
+    if [ "$tag_commit" != "$head_commit" ]; then
+      printf '%s\n' "$tag"
+      return 0
+    fi
+  done < <(
+    git tag -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname \
+      | grep -E "^${escaped_prefix}${stable_version_pattern}$" \
+      || true
+  )
+}
+
+load_prerelease_tags() {
+  local base_version="$1"
+  local prerelease_base_prefix="${TAG_PREFIX}${base_version}-"
+  local prerelease_base_pattern="^${escaped_prefix}${base_version//./\\.}-([0-9A-Za-z-]+)\.(0|[1-9][0-9]*)$"
+
+  mapfile -t all_base_tags < <(
+    git tag -l "${prerelease_base_prefix}*" \
+      | grep -E "$prerelease_base_pattern" \
+      | sort -V \
+      || true
+  )
+}
+
+find_highest_channel() {
+  local base_version="$1"
+  local prerelease_base_prefix="${TAG_PREFIX}${base_version}-"
+  local tag suffix tag_channel highest_channel=''
+
+  for tag in "${all_base_tags[@]}"; do
+    suffix="${tag#"$prerelease_base_prefix"}"
+    tag_channel="${suffix%.*}"
+    if [ -z "$highest_channel" ] || [[ "$tag_channel" > "$highest_channel" ]]; then
+      highest_channel="$tag_channel"
+    fi
+  done
+
+  printf '%s\n' "$highest_channel"
+}
+
 case "$BUMP" in
   patch|minor|major)
     ;;
@@ -57,13 +154,8 @@ fi
 
 escaped_prefix=$(printf '%s' "$TAG_PREFIX" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
 escaped_channel=$(printf '%s' "$CHANNEL" | sed 's/[][(){}.^$*+?|\\-]/\\&/g')
-latest_tag=$(
-  git tag -l "${TAG_PREFIX}[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname \
-    | grep -E "^${escaped_prefix}${stable_version_pattern}$" \
-    | head -n 1 \
-    || true
-)
-
+latest_tag=$(find_latest_stable_tag)
+previous_tag="$latest_tag"
 reused_tag=''
 
 if [ -n "$VERSION_INPUT" ]; then
@@ -101,115 +193,90 @@ else
       exit 1
     fi
 
-    if [ "${#current_stable_tags[@]}" -eq 1 ]; then
-      reused_tag="${current_stable_tags[0]}"
-      base_version="${reused_tag#"$TAG_PREFIX"}"
+    historical_tag=$(find_latest_stable_tag_excluding_head || true)
+    historical_target=$(calculate_base_from_tag "$historical_tag")
+    historical_target_tag="${TAG_PREFIX}${historical_target}"
+
+    if [ "${#current_stable_tags[@]}" -eq 1 ] && [ "${current_stable_tags[0]}" = "$historical_target_tag" ]; then
+      reused_tag="$historical_target_tag"
+      previous_tag="$historical_tag"
+      base_version="$historical_target"
+      next_version="$historical_target"
+      prerelease=false
+    else
+      base_version=$(calculate_base_from_tag "$latest_tag")
       next_version="$base_version"
       prerelease=false
     fi
+  else
+    base_version=$(calculate_base_from_tag "$latest_tag")
+  fi
+fi
+
+if [ -n "$CHANNEL" ]; then
+  stable_base_tag="${TAG_PREFIX}${base_version}"
+  if git rev-parse -q --verify "refs/tags/${stable_base_tag}" >/dev/null; then
+    echo "Cannot create prerelease ${base_version}-${CHANNEL} because stable tag ${stable_base_tag} already exists."
+    exit 1
   fi
 
-  if [ -z "$reused_tag" ]; then
-    if [ -z "$latest_tag" ]; then
-      base_version="${MINIMUM_VERSION:-0.1.0}"
-    else
-      version="${latest_tag#"$TAG_PREFIX"}"
-      IFS=. read -r major minor patch <<< "$version"
+  prerelease_pattern="^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$"
 
-      case "$BUMP" in
-        patch)
-          patch=$((patch + 1))
-          ;;
-        minor)
-          minor=$((minor + 1))
-          patch=0
-          ;;
-        major)
-          major=$((major + 1))
-          minor=0
-          patch=0
-          ;;
-      esac
+  mapfile -t current_channel_tags < <(
+    git tag --points-at HEAD -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" \
+      | grep -E "$prerelease_pattern" \
+      | sort -V \
+      || true
+  )
 
-      base_version="${major}.${minor}.${patch}"
+  if [ "${#current_channel_tags[@]}" -gt 1 ]; then
+    echo "Multiple ${CHANNEL} prerelease tags for ${base_version} point to HEAD: ${current_channel_tags[*]}"
+    exit 1
+  fi
 
-      if [ -n "$MINIMUM_VERSION" ] && version_greater_than "$MINIMUM_VERSION" "$base_version"; then
-        base_version="$MINIMUM_VERSION"
-      fi
-    fi
-
-    if [ -n "$CHANNEL" ]; then
-      stable_base_tag="${TAG_PREFIX}${base_version}"
-      if git rev-parse -q --verify "refs/tags/${stable_base_tag}" >/dev/null; then
-        echo "Cannot create prerelease ${base_version}-${CHANNEL} because stable tag ${stable_base_tag} already exists."
-        exit 1
-      fi
-
-      prerelease_base_prefix="${TAG_PREFIX}${base_version}-"
-      prerelease_base_pattern="^${escaped_prefix}${base_version//./\\.}-([0-9A-Za-z-]+)\.(0|[1-9][0-9]*)$"
-      prerelease_pattern="^${escaped_prefix}${base_version//./\\.}-${escaped_channel}\.(0|[1-9][0-9]*)$"
-
-      mapfile -t current_channel_tags < <(
-        git tag --points-at HEAD -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" \
-          | grep -E "$prerelease_pattern" \
-          | sort -V \
-          || true
-      )
-
-      if [ "${#current_channel_tags[@]}" -gt 1 ]; then
-        echo "Multiple ${CHANNEL} prerelease tags for ${base_version} point to HEAD: ${current_channel_tags[*]}"
-        exit 1
-      fi
-
-      if [ "${#current_channel_tags[@]}" -eq 1 ]; then
-        reused_tag="${current_channel_tags[0]}"
-        next_version="${reused_tag#"$TAG_PREFIX"}"
-      else
-        mapfile -t all_base_tags < <(
-          git tag -l "${prerelease_base_prefix}*" \
-            | grep -E "$prerelease_base_pattern" \
-            | sort -V \
-            || true
-        )
-
-        highest_channel=''
-        for tag in "${all_base_tags[@]}"; do
-          suffix="${tag#"$prerelease_base_prefix"}"
-          tag_channel="${suffix%.*}"
-          if [ -z "$highest_channel" ] || [[ "$tag_channel" > "$highest_channel" ]]; then
-            highest_channel="$tag_channel"
-          fi
-        done
-
-        if [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
-          echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version}."
-          exit 1
-        fi
-
-        latest_channel_tag=$(
-          printf '%s\n' "${all_base_tags[@]}" \
-            | grep -E "$prerelease_pattern" \
-            | sort -V \
-            | tail -n 1 \
-            || true
-        )
-
-        if [ -z "$latest_channel_tag" ]; then
-          channel_number=1
-        else
-          channel_number="${latest_channel_tag##*.}"
-          channel_number=$((channel_number + 1))
-        fi
-
-        next_version="${base_version}-${CHANNEL}.${channel_number}"
-      fi
-
-      prerelease=true
-    else
-      next_version="$base_version"
-      prerelease=false
+  exact_tag="${TAG_PREFIX}${next_version:-}"
+  exact_tag_on_head=false
+  if [ -n "${next_version:-}" ] && git rev-parse -q --verify "refs/tags/${exact_tag}" >/dev/null; then
+    if [ "$(git rev-list -n 1 "$exact_tag")" = "$(git rev-parse HEAD)" ]; then
+      exact_tag_on_head=true
     fi
   fi
+
+  load_prerelease_tags "$base_version"
+  highest_channel=$(find_highest_channel "$base_version")
+
+  if [ "$exact_tag_on_head" != true ] && [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
+    echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version}."
+    exit 1
+  fi
+
+  if [ -n "$VERSION_INPUT" ]; then
+    if [ "$exact_tag_on_head" = true ]; then
+      reused_tag="$exact_tag"
+    fi
+  elif [ "${#current_channel_tags[@]}" -eq 1 ]; then
+    reused_tag="${current_channel_tags[0]}"
+    next_version="${reused_tag#"$TAG_PREFIX"}"
+  else
+    latest_channel_tag=$(
+      printf '%s\n' "${all_base_tags[@]}" \
+        | grep -E "$prerelease_pattern" \
+        | sort -V \
+        | tail -n 1 \
+        || true
+    )
+
+    if [ -z "$latest_channel_tag" ]; then
+      channel_number=1
+    else
+      channel_number="${latest_channel_tag##*.}"
+      channel_number=$((channel_number + 1))
+    fi
+
+    next_version="${base_version}-${CHANNEL}.${channel_number}"
+  fi
+
+  prerelease=true
 fi
 
 next_tag="${TAG_PREFIX}${next_version}"
@@ -225,7 +292,7 @@ if [ -z "$reused_tag" ] && git rev-parse -q --verify "refs/tags/${next_tag}" >/d
   fi
 fi
 
-echo "Previous stable release: ${latest_tag:-none}"
+echo "Previous stable release: ${previous_tag:-none}"
 if [ -n "$reused_tag" ]; then
   echo "Reusing release tag on HEAD: $reused_tag"
 elif [ -n "$VERSION_INPUT" ]; then
@@ -233,7 +300,7 @@ elif [ -n "$VERSION_INPUT" ]; then
 else
   echo "Next release: $next_tag"
 fi
-echo "previous-tag=$latest_tag" >> "$GITHUB_OUTPUT"
+echo "previous-tag=$previous_tag" >> "$GITHUB_OUTPUT"
 echo "base-version=$base_version" >> "$GITHUB_OUTPUT"
 echo "version=$next_version" >> "$GITHUB_OUTPUT"
 echo "tag=$next_tag" >> "$GITHUB_OUTPUT"
