@@ -18,6 +18,7 @@ The goal of this repository is to centralize automation that is genuinely common
 | Action | Description |
 |---|---|
 | [Calculate next version](actions/calculate-next-version/README.md) | Calculates the next stable or channel-based prerelease SemVer version from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
+| [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers. The default calendar scheme uses monthly `rYYYYMM-NNNN` tags. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 
@@ -37,6 +38,7 @@ The first candidates are the patterns repeated across the .NET OSS repositories:
 - restore, formatting verification, build-as-errors, and test;
 - optional NuGet packing and workflow artifacts;
 - stable and channel-based prerelease version calculation;
+- repository release identifier calculation;
 - Semantic Versioning / GitHub release metadata validation.
 
 Release publishing is intentionally being extracted incrementally: KLT, SMCP, OCP, and MinimalOpenAPI currently have similar but not identical NuGet publishing policies.
@@ -46,6 +48,7 @@ Release publishing is intentionally being extracted incrementally: KLT, SMCP, OC
 ```text
 actions/
   calculate-next-version/ # Calculate stable or channel-based prerelease SemVer versions
+  calculate-next-release/ # Calculate repository release identifiers
   dotnet-build/           # Shared .NET restore/format/build/test primitive
   validate-release/       # Validate SemVer tag and GitHub release metadata
 tests/

@@ -1,0 +1,43 @@
+name: Calculate next release
+description: Calculate the next repository release identifier from Git tags.
+
+inputs:
+  scheme:
+    description: Release identifier scheme. Currently only calendar is supported.
+    required: false
+    default: calendar
+  tag-prefix:
+    description: Prefix used by release tags.
+    required: false
+    default: r
+
+outputs:
+  release:
+    description: Calculated or reused release identifier without the tag prefix.
+    value: ${{ steps.calculate.outputs.release }}
+  tag:
+    description: Calculated or reused release tag including the configured prefix.
+    value: ${{ steps.calculate.outputs.tag }}
+  previous-tag:
+    description: Previous valid release tag.
+    value: ${{ steps.calculate.outputs.previous-tag }}
+  scheme:
+    description: Release identifier scheme used for the result.
+    value: ${{ steps.calculate.outputs.scheme }}
+  period:
+    description: Calendar release period in YYYYMM form.
+    value: ${{ steps.calculate.outputs.period }}
+  sequence:
+    description: Four-digit release sequence within the period.
+    value: ${{ steps.calculate.outputs.sequence }}
+
+runs:
+  using: composite
+  steps:
+    - name: Calculate next release
+      id: calculate
+      shell: bash
+      env:
+        SCHEME: ${{ inputs.scheme }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+      run: bash "${{ github.action_path }}/calculate.sh"
