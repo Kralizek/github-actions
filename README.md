@@ -18,7 +18,7 @@ The goal of this repository is to centralize automation that is genuinely common
 | Action | Description |
 |---|---|
 | [Calculate next version](actions/calculate-next-version/README.md) | Calculates the next stable or channel-based prerelease SemVer version from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
-| [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers. The default periodic scheme uses monthly `rYYYYMM-NNNN` tags and can vary the period, period format, and sequence width. |
+| [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers. The default periodic scheme uses monthly `rYYYYMM-NNNN` tags and supports a compact `{date:...}` / `{sequence:N}` format grammar. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 
@@ -52,8 +52,8 @@ actions/
   dotnet-build/           # Shared .NET restore/format/build/test primitive
   validate-release/       # Validate SemVer tag and GitHub release metadata
 tests/
-  run.sh                   # Discover and run Bash test suites
-  <suite>/test.sh           # Behavioral tests for Bash-backed actions/workflows
+  run.sh                   # Discover and run behavioral test suites
+  <suite>/test.sh          # Integration tests for action/workflow behavior
 .github/workflows/
   dotnet-ci.yml             # Reusable opinionated CI workflow for .NET libraries
   create-release.yml        # Release this actions repository
@@ -68,13 +68,13 @@ docs/
 
 See [`docs/migration-candidates.md`](docs/migration-candidates.md) for the inventory and extraction plan.
 
-## Bash tests
+## Behavioral tests
 
-Bash-backed behavior is tested outside the validation workflow. Each suite lives under `tests/<suite>/test.sh`, and `tests/run.sh` discovers and executes every suite.
+Each integration suite lives under `tests/<suite>/test.sh`, and `tests/run.sh` discovers and executes every suite. Bash-backed actions are exercised directly; Node-backed actions are exercised through their committed runtime artifact.
 
 The validation workflow first runs `bash -n` over shell scripts under both `actions/` and `tests/`, then executes the suites. This keeps behavioral assertions versioned next to the code without turning `.github/workflows/validate.yml` into a test implementation.
 
-When adding Bash-backed behavior, add or extend a matching suite under `tests/`. Tests should create their own temporary fixtures and clean them up so they remain isolated and runnable locally with `bash tests/run.sh`.
+When adding action behavior, add or extend a matching suite under `tests/`. Tests should create their own temporary fixtures and clean them up so they remain isolated and runnable locally with `bash tests/run.sh`.
 
 See [`tests/README.md`](tests/README.md) for the test conventions.
 
