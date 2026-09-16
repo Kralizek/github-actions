@@ -66,4 +66,6 @@ Periodic releases are globally monotonic. If the latest matching release belongs
 
 The periodic scheme uses the runner's UTC date. The implementation accepts an internal `RELEASE_DATE=YYYY-MM-DD` environment override for deterministic tests; this is not an action input.
 
-The runtime is a dependency-free Node action. TypeScript source lives under `src/`; the committed `dist/index.js` is the executable GitHub Action artifact. Run `npm install` and `npm run build` in the action directory when changing the TypeScript source, and commit the resulting `dist/index.js`.
+The implementation is dependency-free Node with TypeScript source under `src/` and committed `dist/index.js`. The action is composite and invokes the runner's `node` executable instead of declaring a specific GitHub JavaScript-action Node major, so following GitHub's Node runtime train does not require an action release. GitHub-hosted runners provide Node; self-hosted runners must expose a compatible `node` executable on `PATH`.
+
+Run `npm install` and `npm run build` in the action directory when changing the TypeScript source, and commit the resulting `dist/index.js`.
