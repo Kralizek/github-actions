@@ -1,5 +1,5 @@
-name: Calculate next release
-description: Calculate the next stable or prerelease SemVer release from Git tags.
+name: Calculate next version
+description: Calculate the next stable or prerelease SemVer version from Git tags.
 
 inputs:
   bump:
@@ -45,7 +45,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Calculate next release
+    - name: Calculate next version
       id: calculate
       shell: bash
       env:
