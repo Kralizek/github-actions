@@ -142,6 +142,41 @@ assert_output "$reverse_next" 'tag=002-r202609'
 rm -rf "$custom_repository"
 cd "$repository"
 
+echo "Reject reuse of an older release tag on HEAD"
+older_repository="$(mktemp -d)"
+cd "$older_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "First release"
+git tag r202609-0001
+first_commit="$(git rev-parse HEAD)"
+echo second > initial.txt
+git add initial.txt
+git commit -qm "Second release"
+git tag r202609-0002
+git checkout -q "$first_commit"
+assert_fails calculate 2026-09-20
+rm -rf "$older_repository"
+cd "$repository"
+
+echo "Reject multiple current-period release tags on HEAD"
+multiple_repository="$(mktemp -d)"
+cd "$multiple_repository"
+git init -q
+git config user.name "Validation"
+git config user.email "validation@example.invalid"
+touch initial.txt
+git add initial.txt
+git commit -qm "Initial commit"
+git tag r202609-0001
+git tag r202609-0002
+assert_fails calculate 2026-09-20
+rm -rf "$multiple_repository"
+cd "$repository"
+
 echo "Reject unsupported schemes and periods"
 assert_fails calculate 2026-09-16 month '' calendar
 assert_fails calculate 2026-09-16 quarter
