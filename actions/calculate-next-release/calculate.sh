@@ -242,38 +242,40 @@ if [ -n "$CHANNEL" ]; then
     fi
   fi
 
-  load_prerelease_tags "$base_version"
-  highest_channel=$(find_highest_channel "$base_version")
-
-  if [ "$exact_tag_on_head" != true ] && [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
-    echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version}."
-    exit 1
-  fi
-
-  if [ -n "$VERSION_INPUT" ]; then
-    if [ "$exact_tag_on_head" = true ]; then
-      reused_tag="$exact_tag"
-    fi
-  elif [ "${#current_channel_tags[@]}" -eq 1 ]; then
+  if [ -z "$VERSION_INPUT" ] && [ "${#current_channel_tags[@]}" -eq 1 ]; then
     reused_tag="${current_channel_tags[0]}"
     next_version="${reused_tag#"$TAG_PREFIX"}"
   else
-    latest_channel_tag=$(
-      printf '%s\n' "${all_base_tags[@]}" \
-        | grep -E "$prerelease_pattern" \
-        | sort -V \
-        | tail -n 1 \
-        || true
-    )
+    load_prerelease_tags "$base_version"
+    highest_channel=$(find_highest_channel "$base_version")
 
-    if [ -z "$latest_channel_tag" ]; then
-      channel_number=1
-    else
-      channel_number="${latest_channel_tag##*.}"
-      channel_number=$((channel_number + 1))
+    if [ "$exact_tag_on_head" != true ] && [ -n "$highest_channel" ] && [[ "$CHANNEL" < "$highest_channel" ]]; then
+      echo "Cannot move prerelease channel backwards from ${highest_channel} to ${CHANNEL} for ${base_version}."
+      exit 1
     fi
 
-    next_version="${base_version}-${CHANNEL}.${channel_number}"
+    if [ -n "$VERSION_INPUT" ]; then
+      if [ "$exact_tag_on_head" = true ]; then
+        reused_tag="$exact_tag"
+      fi
+    else
+      latest_channel_tag=$(
+        printf '%s\n' "${all_base_tags[@]}" \
+          | grep -E "$prerelease_pattern" \
+          | sort -V \
+          | tail -n 1 \
+          || true
+      )
+
+      if [ -z "$latest_channel_tag" ]; then
+        channel_number=1
+      else
+        channel_number="${latest_channel_tag##*.}"
+        channel_number=$((channel_number + 1))
+      fi
+
+      next_version="${base_version}-${CHANNEL}.${channel_number}"
+    fi
   fi
 
   prerelease=true
