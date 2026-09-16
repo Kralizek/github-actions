@@ -1,6 +1,6 @@
-# Calculate next release
+# Calculate next version
 
-Calculates the next stable or prerelease Semantic Versioning release from the repository's Git tags.
+Calculates the next stable or prerelease Semantic Versioning version from the repository's Git tags.
 
 The action finds the highest stable tag matching the configured prefix and `major.minor.patch`, applies the requested bump, and returns the resulting version and tag. Existing prerelease tags do not affect the stable baseline.
 

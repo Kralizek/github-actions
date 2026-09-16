@@ -17,7 +17,7 @@ The goal of this repository is to centralize automation that is genuinely common
 
 | Action | Description |
 |---|---|
-| [Calculate next release](actions/calculate-next-release/README.md) | Calculates the next stable or channel-based prerelease SemVer release from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
+| [Calculate next version](actions/calculate-next-version/README.md) | Calculates the next stable or channel-based prerelease SemVer version from Git tags, with an optional minimum-version floor and `0.1.0` bootstrap target. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 
@@ -45,11 +45,11 @@ Release publishing is intentionally being extracted incrementally: KLT, SMCP, OC
 
 ```text
 actions/
-  calculate-next-release/ # Calculate stable or channel-based prerelease versions
-  dotnet-build/            # Shared .NET restore/format/build/test primitive
-  validate-release/        # Validate SemVer tag and GitHub release metadata
+  calculate-next-version/ # Calculate stable or channel-based prerelease SemVer versions
+  dotnet-build/           # Shared .NET restore/format/build/test primitive
+  validate-release/       # Validate SemVer tag and GitHub release metadata
 tests/
-  run.sh                    # Discover and run Bash test suites
+  run.sh                   # Discover and run Bash test suites
   <suite>/test.sh           # Behavioral tests for Bash-backed actions/workflows
 .github/workflows/
   dotnet-ci.yml             # Reusable opinionated CI workflow for .NET libraries

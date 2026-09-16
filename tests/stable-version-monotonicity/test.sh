@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-script="$root/actions/calculate-next-release/calculate.sh"
+script="$root/actions/calculate-next-version/calculate.sh"
 repository="$(mktemp -d)"
 trap 'rm -rf "$repository"' EXIT
 

@@ -26,7 +26,7 @@ jobs:
     name: Create release
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.release.outputs.tag }}
+      tag: ${{ steps.version.outputs.tag }}
 
     steps:
       - name: Validate release source
@@ -40,9 +40,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Calculate next release
-        id: release
-        uses: ./actions/calculate-next-release
+      - name: Calculate next version
+        id: version
+        uses: ./actions/calculate-next-version
         with:
           bump: ${{ inputs.version_bump }}
 
@@ -50,8 +50,8 @@ jobs:
         if: ${{ !inputs.dry_run }}
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: ${{ steps.release.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
 
