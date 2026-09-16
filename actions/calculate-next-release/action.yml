@@ -24,22 +24,22 @@ inputs:
 
 outputs:
   version:
-    description: Calculated SemVer version without the tag prefix.
+    description: Calculated, explicitly selected, or reused SemVer version without the tag prefix.
     value: ${{ steps.calculate.outputs.version }}
   tag:
-    description: Calculated release tag including the configured prefix.
+    description: Calculated, explicitly selected, or reused release tag including the configured prefix.
     value: ${{ steps.calculate.outputs.tag }}
   previous-tag:
-    description: Latest stable release tag used as the calculation baseline.
+    description: Stable release tag used as the calculation baseline.
     value: ${{ steps.calculate.outputs.previous-tag }}
   base-version:
     description: Stable SemVer target before any prerelease channel is applied.
     value: ${{ steps.calculate.outputs.base-version }}
   prerelease:
-    description: Whether the calculated release is a prerelease.
+    description: Whether the selected release is a prerelease.
     value: ${{ steps.calculate.outputs.prerelease }}
   channel:
-    description: Prerelease channel used for the calculated version, or empty for a stable release.
+    description: Prerelease channel used for the selected version, or empty for a stable release.
     value: ${{ steps.calculate.outputs.channel }}
 
 runs:
