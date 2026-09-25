@@ -291,6 +291,25 @@ fi
 
 next_tag="${TAG_PREFIX}${next_version}"
 
+release_notes_start_tag="$previous_tag"
+if [ -z "$CHANNEL" ] && [ -n "$VERSION_INPUT" ] && git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
+  if [ "$(git rev-list -n 1 "$next_tag")" = "$(git rev-parse HEAD)" ]; then
+    release_notes_start_tag=$(find_latest_stable_tag_excluding_head || true)
+  fi
+elif [ -n "$CHANNEL" ]; then
+  release_notes_start_tag=$(
+    git tag -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" --sort=-version:refname \
+      | grep -E "$prerelease_pattern" \
+      | grep -Fxv "$next_tag" \
+      | head -n 1 \
+      || true
+  )
+
+  if [ -z "$release_notes_start_tag" ]; then
+    release_notes_start_tag="$previous_tag"
+  fi
+fi
+
 if [ -z "$reused_tag" ] && git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
   tag_commit=$(git rev-list -n 1 "$next_tag")
   head_commit=$(git rev-parse HEAD)
@@ -311,6 +330,7 @@ else
   echo "Next release: $next_tag"
 fi
 echo "previous-tag=$previous_tag" >> "$GITHUB_OUTPUT"
+echo "release-notes-start-tag=$release_notes_start_tag" >> "$GITHUB_OUTPUT"
 echo "base-version=$base_version" >> "$GITHUB_OUTPUT"
 echo "version=$next_version" >> "$GITHUB_OUTPUT"
 echo "tag=$next_tag" >> "$GITHUB_OUTPUT"

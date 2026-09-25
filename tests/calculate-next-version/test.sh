@@ -59,6 +59,7 @@ assert_fails() {
 echo "Default first stable release"
 bootstrap_default_output=$(calculate minor)
 assert_output "$bootstrap_default_output" 'previous-tag='
+assert_output "$bootstrap_default_output" 'release-notes-start-tag='
 assert_output "$bootstrap_default_output" 'base-version=0.1.0'
 assert_output "$bootstrap_default_output" 'version=0.1.0'
 assert_output "$bootstrap_default_output" 'tag=v0.1.0'
@@ -108,6 +109,7 @@ patch_output=$(calculate patch)
 assert_output "$patch_output" 'version=1.2.4'
 assert_output "$patch_output" 'tag=v1.2.4'
 assert_output "$patch_output" 'previous-tag=v1.2.3'
+assert_output "$patch_output" 'release-notes-start-tag=v1.2.3'
 assert_output "$patch_output" 'base-version=1.2.4'
 assert_output "$patch_output" 'prerelease=false'
 assert_output "$patch_output" 'channel='
@@ -154,14 +156,17 @@ assert_output "$floor_rc_output" 'version=2.0.0-rc.1'
 echo "First prerelease in a channel"
 alpha_output=$(calculate minor alpha)
 assert_output "$alpha_output" 'version=1.3.0-alpha.1'
+assert_output "$alpha_output" 'release-notes-start-tag=v1.2.3'
 git tag v1.3.0-alpha.1
 
 echo "Allow multiple forward channels on the same commit"
 beta_same_commit_output=$(calculate minor beta)
 assert_output "$beta_same_commit_output" 'version=1.3.0-beta.1'
+assert_output "$beta_same_commit_output" 'release-notes-start-tag=v1.2.3'
 git tag v1.3.0-beta.1
 rc_same_commit_output=$(calculate minor rc)
 assert_output "$rc_same_commit_output" 'version=1.3.0-rc.1'
+assert_output "$rc_same_commit_output" 'release-notes-start-tag=v1.2.3'
 git tag v1.3.0-rc.1
 
 echo "Reuse matching prerelease tag on HEAD"
@@ -188,6 +193,7 @@ git commit -qm "Advance HEAD"
 echo "Continue current highest channel across commits"
 next_rc_output=$(calculate minor rc)
 assert_output "$next_rc_output" 'version=1.3.0-rc.2'
+assert_output "$next_rc_output" 'release-notes-start-tag=v1.3.0-rc.1'
 git tag v1.3.0-rc.2
 
 echo "Reject global channel regression on later commits"
@@ -218,6 +224,7 @@ echo "Allow stable release from a prerelease commit"
 stable_from_prerelease_output=$(calculate minor)
 assert_output "$stable_from_prerelease_output" 'version=1.3.0'
 assert_output "$stable_from_prerelease_output" 'tag=v1.3.0'
+assert_output "$stable_from_prerelease_output" 'release-notes-start-tag=v1.2.3'
 
 echo "A stable release is idempotent only for the same calculated operation"
 git tag v1.3.0
@@ -225,8 +232,10 @@ stable_rerun_output=$(calculate minor)
 assert_output "$stable_rerun_output" 'previous-tag=v1.2.3'
 assert_output "$stable_rerun_output" 'version=1.3.0'
 assert_output "$stable_rerun_output" 'tag=v1.3.0'
+assert_output "$stable_rerun_output" 'release-notes-start-tag=v1.2.3'
 explicit_stable_rerun_output=$(calculate minor '' '' 1.3.0)
 assert_output "$explicit_stable_rerun_output" 'version=1.3.0'
+assert_output "$explicit_stable_rerun_output" 'release-notes-start-tag=v1.2.3'
 
 echo "Reject ambiguous multiple stable tags on HEAD"
 git tag v1.3.1

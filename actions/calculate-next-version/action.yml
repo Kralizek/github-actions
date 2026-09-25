@@ -32,6 +32,9 @@ outputs:
   previous-tag:
     description: Stable release tag used as the calculation baseline.
     value: ${{ steps.calculate.outputs.previous-tag }}
+  release-notes-start-tag:
+    description: Tag to use as the starting point for generated release notes, or empty during bootstrap.
+    value: ${{ steps.calculate.outputs.release-notes-start-tag }}
   base-version:
     description: Stable SemVer target before any prerelease channel is applied.
     value: ${{ steps.calculate.outputs.base-version }}
