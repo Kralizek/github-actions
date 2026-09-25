@@ -292,7 +292,11 @@ fi
 next_tag="${TAG_PREFIX}${next_version}"
 
 release_notes_start_tag="$previous_tag"
-if [ -n "$CHANNEL" ]; then
+if [ -z "$CHANNEL" ] && [ -n "$VERSION_INPUT" ] && git rev-parse -q --verify "refs/tags/${next_tag}" >/dev/null; then
+  if [ "$(git rev-list -n 1 "$next_tag")" = "$(git rev-parse HEAD)" ]; then
+    release_notes_start_tag=$(find_latest_stable_tag_excluding_head || true)
+  fi
+elif [ -n "$CHANNEL" ]; then
   release_notes_start_tag=$(
     git tag -l "${TAG_PREFIX}${base_version}-${CHANNEL}.*" --sort=-version:refname \
       | grep -E "$prerelease_pattern" \
