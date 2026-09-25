@@ -18,6 +18,8 @@ Prerelease channels progress monotonically across the repository for each base v
 
 A stable release may be created from a commit that already has prerelease tags. A stable tag closes only its own base version: once `v1.3.0` exists, `v1.3.0-*` prereleases are no longer valid targets, including explicit overrides, but the same commit may still be used for a later base such as `v1.4.0-rc.1` if that is what the current stable baseline and requested bump calculate.
 
+The `release-notes-start-tag` output selects the baseline for generated release notes. Stable releases and the first release in each prerelease channel start from the previous stable release. Later releases in the same prerelease channel start from the preceding release in that channel. For example, `v1.3.0-beta.1` starts from `v1.2.3` even when alpha releases exist, while `v1.3.0-beta.2` starts from `v1.3.0-beta.1`.
+
 ## Inputs
 
 | Input | Required | Default | Description |
@@ -35,6 +37,7 @@ A stable release may be created from a commit that already has prerelease tags. 
 | `version` | Calculated, explicitly selected, or reused SemVer version without the tag prefix. |
 | `tag` | Calculated, explicitly selected, or reused release tag including the configured prefix. |
 | `previous-tag` | Stable release tag used as the calculation baseline, or empty during bootstrap. |
+| `release-notes-start-tag` | Tag to use as the starting point for generated release notes. Same-channel prereleases are incremental; channel changes and stable releases restart from the previous stable. Empty during bootstrap. |
 | `base-version` | Stable target before any prerelease channel is applied. |
 | `prerelease` | `true` when `channel` is provided, otherwise `false`. |
 | `channel` | Prerelease channel used for the result, or empty for a stable release. |
