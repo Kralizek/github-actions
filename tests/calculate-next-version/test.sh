@@ -235,6 +235,7 @@ assert_output "$stable_rerun_output" 'tag=v1.3.0'
 assert_output "$stable_rerun_output" 'release-notes-start-tag=v1.2.3'
 explicit_stable_rerun_output=$(calculate minor '' '' 1.3.0)
 assert_output "$explicit_stable_rerun_output" 'version=1.3.0'
+assert_output "$explicit_stable_rerun_output" 'release-notes-start-tag=v1.2.3'
 
 echo "Reject ambiguous multiple stable tags on HEAD"
 git tag v1.3.1
