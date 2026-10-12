@@ -37,6 +37,7 @@ case "$1 $2" in
     esac ;;
   "release create")
     echo created >> "$MOCK_EVENTS"
+    printf '%s\\n' "$@" > "$MOCK_ARGS"
     git tag v0.1.0 "$RELEASE_TARGET"
     git push -q origin refs/tags/v0.1.0
     exit 0 ;;
@@ -51,7 +52,7 @@ chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 export GH_TOKEN=fake RELEASE_REPOSITORY=example/repo RELEASE_TAG=v0.1.0
 export RELEASE_TARGET="$head_sha" RELEASE_TITLE=v0.1.0 RELEASE_PRERELEASE=false
-export NOTES_START_TAG='' MOCK_EVENTS="$work/events"
+export NOTES_START_TAG='' RELEASE_BODY='' RELEASE_BODY_FILE='' MOCK_EVENTS="$work/events" MOCK_ARGS="$work/args"
 
 run_case() {
   export GITHUB_OUTPUT="$work/output"
@@ -91,5 +92,36 @@ if run_case >/dev/null 2>&1; then
   exit 1
 fi
 test "$(wc -l < "$MOCK_EVENTS")" -eq 1
+
+
+echo "Explicit body on a new release"
+git tag -d v0.1.0 >/dev/null
+git push -q origin :refs/tags/v0.1.0
+export RELEASE_TARGET="$head_sha" MOCK_API_MODE=missing RELEASE_BODY='Custom **Markdown** notes'
+run_case
+grep -qx -- '--notes' "$MOCK_ARGS"
+grep -Fxq -- 'Custom **Markdown** notes' "$MOCK_ARGS"
+if grep -qx -- '--generate-notes' "$MOCK_ARGS"; then exit 1; fi
+
+echo "Explicit notes file on a new release"
+git tag -d v0.1.0 >/dev/null
+git push -q origin :refs/tags/v0.1.0
+printf 'File notes\n' > "$work/notes.md"
+export RELEASE_BODY='' RELEASE_BODY_FILE="$work/notes.md"
+run_case
+grep -qx -- '--notes-file' "$MOCK_ARGS"
+grep -Fxq -- "$work/notes.md" "$MOCK_ARGS"
+
+echo "Reject both explicit note inputs"
+export RELEASE_BODY='text'
+if run_case >/dev/null 2>&1; then echo 'Expected both inputs to fail' >&2; exit 1; fi
+
+echo "Reject notes baseline with explicit body"
+export RELEASE_BODY_FILE='' NOTES_START_TAG='v0.0.1'
+if run_case >/dev/null 2>&1; then echo 'Expected notes baseline conflict to fail' >&2; exit 1; fi
+
+echo "Reject nonexistent notes file"
+export RELEASE_BODY='' NOTES_START_TAG='' RELEASE_BODY_FILE="$work/missing.md"
+if run_case >/dev/null 2>&1; then echo 'Expected missing notes file to fail' >&2; exit 1; fi
 
 echo "ensure-github-release tests passed"
