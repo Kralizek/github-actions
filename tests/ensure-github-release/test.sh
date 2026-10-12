@@ -37,7 +37,7 @@ case "$1 $2" in
     esac ;;
   "release create")
     echo created >> "$MOCK_EVENTS"
-    printf '%s\\n' "$@" > "$MOCK_ARGS"
+    printf '%s\n' "$@" > "$MOCK_ARGS"
     git tag v0.1.0 "$RELEASE_TARGET"
     git push -q origin refs/tags/v0.1.0
     exit 0 ;;
