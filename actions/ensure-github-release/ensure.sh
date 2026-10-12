@@ -7,6 +7,19 @@ set -euo pipefail
 : "${GH_TOKEN:?GITHUB_TOKEN required}"
 : "${GITHUB_OUTPUT:?GITHUB_OUTPUT required}"
 
+if [[ -n "${RELEASE_BODY:-}" && -n "${RELEASE_BODY_FILE:-}" ]]; then
+  echo "::error::body and body-file are mutually exclusive" >&2
+  exit 1
+fi
+if [[ -n "${NOTES_START_TAG:-}" && ( -n "${RELEASE_BODY:-}" || -n "${RELEASE_BODY_FILE:-}" ) ]]; then
+  echo "::error::release-notes-start-tag cannot be combined with explicit notes" >&2
+  exit 1
+fi
+if [[ -n "${RELEASE_BODY_FILE:-}" && ! -f "$RELEASE_BODY_FILE" ]]; then
+  echo "::error::body-file does not exist: $RELEASE_BODY_FILE" >&2
+  exit 1
+fi
+
 if [[ "$RELEASE_PRERELEASE" != true && "$RELEASE_PRERELEASE" != false ]]; then
   echo "::error::prerelease must be true or false" >&2
   exit 1
@@ -51,9 +64,16 @@ if [[ -z "$release_json" ]]; then
   # Create a missing release; gh handles creating the tag if absent. An existing
   # tag is safe because its target was validated above.
   args=(release create "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY"
-    --target "$RELEASE_TARGET" --title "${RELEASE_TITLE:-$RELEASE_TAG}" --generate-notes)
+    --target "$RELEASE_TARGET" --title "${RELEASE_TITLE:-$RELEASE_TAG}")
+  if [[ -n "${RELEASE_BODY:-}" ]]; then
+    args+=(--notes "$RELEASE_BODY")
+  elif [[ -n "${RELEASE_BODY_FILE:-}" ]]; then
+    args+=(--notes-file "$RELEASE_BODY_FILE")
+  else
+    args+=(--generate-notes)
+    if [[ -n "${NOTES_START_TAG:-}" ]]; then args+=(--notes-start-tag "$NOTES_START_TAG"); fi
+  fi
   if [[ "$RELEASE_PRERELEASE" == true ]]; then args+=(--prerelease); fi
-  if [[ -n "${NOTES_START_TAG:-}" ]]; then args+=(--notes-start-tag "$NOTES_START_TAG"); fi
   gh "${args[@]}"
   created=true
   release_json=$(gh api "repos/$RELEASE_REPOSITORY/releases/tags/$RELEASE_TAG")
