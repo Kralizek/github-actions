@@ -1,8 +1,8 @@
 # Ensure GitHub release
 
 Creates or reuses a GitHub release for a selected tag and **exact commit**.
-This action complements `calculate-next-version`: version calculation chooses
-the release identity, while this action ensures GitHub contains that release.
+The caller supplies the release identity and expected commit. The action verifies
+that the tag identifies that commit before returning the release details.
 
 Requires checkout with Git history/tags, `gh`, `git`, `jq`, a token with
 `contents: write` permission, and network access to the repository remote.
@@ -18,20 +18,15 @@ steps:
   - uses: actions/checkout@v7
     with:
       fetch-depth: 0
-  - id: version
-    uses: Kralizek/github-actions/actions/calculate-next-version@v0.4
-    with:
-      bump: patch
   - id: release
     uses: Kralizek/github-actions/actions/ensure-github-release@v0.5
     with:
-      tag: ${{ steps.version.outputs.tag }}
+      tag: v1.2.3
       target: ${{ github.sha }}
-      prerelease: ${{ steps.version.outputs.prerelease }}
-      release-notes-start-tag: ${{ steps.version.outputs.release-notes-start-tag }}
+      prerelease: 'false'
 ```
 
-The version in this example is illustrative; update it after the action is released.
+The action reference is illustrative; use a published version or commit SHA.
 
 ## Behavior
 
@@ -45,5 +40,5 @@ Outputs are `created` (`true`/`false`), `release-id`,
 `release-url`, and `tag`.
 
 This action does **not** upload assets, edit an existing release, or deduplicate
-publication to registries such as NuGet or CurseForge. It assumes callers serialize
-competing release operations for the same tag.
+publication to external services. Callers should serialize competing release
+operations for the same tag.
