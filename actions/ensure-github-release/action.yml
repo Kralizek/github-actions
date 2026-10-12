@@ -21,6 +21,14 @@ inputs:
     description: Tag from which generated release notes begin
     required: false
     default: ''
+  body:
+    description: Optional Markdown release notes, mutually exclusive with body-file
+    required: false
+    default: ''
+  body-file:
+    description: Optional path to Markdown release notes, mutually exclusive with body
+    required: false
+    default: ''
   repository:
     description: Repository in owner/name format
     required: false
@@ -53,5 +61,7 @@ runs:
         RELEASE_TITLE: ${{ inputs.title }}
         RELEASE_PRERELEASE: ${{ inputs.prerelease }}
         NOTES_START_TAG: ${{ inputs.release-notes-start-tag }}
+        RELEASE_BODY: ${{ inputs.body }}
+        RELEASE_BODY_FILE: ${{ inputs.body-file }}
         RELEASE_REPOSITORY: ${{ inputs.repository }}
       run: bash "${{ github.action_path }}/ensure.sh"
