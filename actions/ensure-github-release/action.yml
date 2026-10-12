@@ -1,0 +1,57 @@
+name: Ensure GitHub release
+description: Create or safely reuse a GitHub release for an exact tag and commit.
+
+inputs:
+  tag:
+    description: Release tag
+    required: true
+  target:
+    description: Expected commit SHA
+    required: false
+    default: ${{ github.sha }}
+  title:
+    description: Release title
+    required: false
+    default: ''
+  prerelease:
+    description: Whether this release is a prerelease
+    required: false
+    default: 'false'
+  release-notes-start-tag:
+    description: Tag from which generated release notes begin
+    required: false
+    default: ''
+  repository:
+    description: Repository in owner/name format
+    required: false
+    default: ${{ github.repository }}
+
+outputs:
+  created:
+    description: Whether a new release was created
+    value: ${{ steps.ensure.outputs.created }}
+  release-id:
+    description: GitHub release ID
+    value: ${{ steps.ensure.outputs.release-id }}
+  release-url:
+    description: GitHub release URL
+    value: ${{ steps.ensure.outputs.release-url }}
+  tag:
+    description: Verified release tag
+    value: ${{ steps.ensure.outputs.tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Ensure release
+      id: ensure
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_TITLE: ${{ inputs.title }}
+        RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+        NOTES_START_TAG: ${{ inputs.release-notes-start-tag }}
+        RELEASE_REPOSITORY: ${{ inputs.repository }}
+      run: bash "${{ github.action_path }}/ensure.sh"
