@@ -28,9 +28,16 @@ steps:
 
 The action reference is illustrative; use a published version or commit SHA.
 
+## Release notes
+
+By default, the action generates release notes. Supply `body` for Markdown text or
+`body-file` for a path to an existing Markdown file. These inputs are mutually
+exclusive and cannot be combined with `release-notes-start-tag`, which applies
+only when generating notes. Existing releases retain their current notes.
+
 ## Behavior
 
-* Missing release: creates it, optionally creating the tag, and generates notes.
+* Missing release: creates it, optionally creating the tag, using explicit or generated notes.
 * Existing release: preserves its metadata and returns its identity.
 * Existing tag pointing to another commit: fails without moving the tag.
 * API lookup errors other than a verified HTTP 404: fail closed.
