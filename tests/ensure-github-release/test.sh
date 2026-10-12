@@ -95,6 +95,7 @@ test "$(wc -l < "$MOCK_EVENTS")" -eq 1
 
 
 echo "Explicit body on a new release"
+set -x
 git tag -d v0.1.0 >/dev/null
 git push -q origin :refs/tags/v0.1.0
 export RELEASE_TARGET="$(git rev-parse HEAD)" MOCK_API_MODE=missing RELEASE_BODY='Custom **Markdown** notes'
