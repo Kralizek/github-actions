@@ -21,6 +21,7 @@ The goal of this repository is to centralize automation that is genuinely common
 | [Calculate next release](actions/calculate-next-release/README.md) | Calculates repository release identifiers with an extensible periodic format grammar, implemented as a direct Deno TypeScript action. |
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
+| [Ensure GitHub release](actions/ensure-github-release/README.md) | Creates or safely reuses a release for an exact tag and commit, with optional prerelease and draft creation. |
 
 ## Reusable workflows
 
@@ -39,7 +40,8 @@ The first candidates are the patterns repeated across the .NET OSS repositories:
 - optional NuGet packing and workflow artifacts;
 - stable and channel-based prerelease version calculation;
 - repository release identifier calculation;
-- Semantic Versioning / GitHub release metadata validation.
+- Semantic Versioning / GitHub release metadata validation;
+- idempotent creation or reuse of GitHub releases, including draft-first publishing.
 
 Release publishing is intentionally being extracted incrementally: KLT, SMCP, OCP, and MinimalOpenAPI currently have similar but not identical NuGet publishing policies.
 
@@ -51,6 +53,7 @@ actions/
   calculate-next-release/ # Calculate repository release identifiers
   dotnet-build/           # Shared .NET restore/format/build/test primitive
   validate-release/       # Validate SemVer tag and GitHub release metadata
+  ensure-github-release/   # Create or reuse published/draft GitHub releases
 tests/
   run.sh                   # Discover and run Bash test suites
   <suite>/test.sh          # Behavioral tests for shared actions/workflows
@@ -117,6 +120,29 @@ steps:
 ```
 
 The action enforces strict Semantic Versioning, verifies that the tag points at the checked-out commit, and checks that GitHub's prerelease flag matches the tag.
+
+## Ensure GitHub release action
+
+Use `ensure-github-release` to create a release for a known tag and commit, or safely reuse an existing release. The action validates the remote tag's resolved commit and fails on unexpected API errors. It does not upload assets, publish packages, or modify the metadata of an existing release.
+
+```yaml
+permissions:
+  contents: write
+
+steps:
+  - uses: actions/checkout@v7
+    with:
+      fetch-depth: 0
+  - id: release
+    uses: Kralizek/github-actions/actions/ensure-github-release@v0.5
+    with:
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      release-notes-start-tag: ${{ steps.version.outputs['release-notes-start-tag'] }}
+      draft: 'true'
+```
+
+`draft` defaults to `false`, so existing callers continue to create published releases. Set it to `true` for workflows that publish packages and attach assets before explicitly publishing the draft. When a release already exists, the action preserves its draft and prerelease flags; callers requiring a particular existing release state must validate it separately. See the [action documentation](actions/ensure-github-release/README.md) for the full contract.
 
 ## Releasing this repository
 
