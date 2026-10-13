@@ -24,6 +24,10 @@ if [[ "$RELEASE_PRERELEASE" != true && "$RELEASE_PRERELEASE" != false ]]; then
   echo "::error::prerelease must be true or false" >&2
   exit 1
 fi
+if [[ "${RELEASE_DRAFT:-false}" != true && "${RELEASE_DRAFT:-false}" != false ]]; then
+  echo "::error::draft must be true or false" >&2
+  exit 1
+fi
 if [[ ! "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   echo "::error::Invalid release tag" >&2
   exit 1
@@ -74,6 +78,7 @@ if [[ -z "$release_json" ]]; then
     if [[ -n "${NOTES_START_TAG:-}" ]]; then args+=(--notes-start-tag "$NOTES_START_TAG"); fi
   fi
   if [[ "$RELEASE_PRERELEASE" == true ]]; then args+=(--prerelease); fi
+  if [[ "${RELEASE_DRAFT:-false}" == true ]]; then args+=(--draft); fi
   gh "${args[@]}"
   created=true
   release_json=$(gh api "repos/$RELEASE_REPOSITORY/releases/tags/$RELEASE_TAG")

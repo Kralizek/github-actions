@@ -51,7 +51,7 @@ GH
 chmod +x "$work/bin/gh"
 export PATH="$work/bin:$PATH"
 export GH_TOKEN=fake RELEASE_REPOSITORY=example/repo RELEASE_TAG=v0.1.0
-export RELEASE_TARGET="$head_sha" RELEASE_TITLE=v0.1.0 RELEASE_PRERELEASE=false
+export RELEASE_TARGET="$head_sha" RELEASE_TITLE=v0.1.0 RELEASE_PRERELEASE=false RELEASE_DRAFT=false
 export NOTES_START_TAG='' RELEASE_BODY='' RELEASE_BODY_FILE='' MOCK_EVENTS="$work/events" MOCK_ARGS="$work/args"
 
 run_case() {
@@ -93,6 +93,25 @@ if run_case >/dev/null 2>&1; then
 fi
 test "$(wc -l < "$MOCK_EVENTS")" -eq 1
 
+
+echo "Default creates a published release without --draft"
+git tag -d v0.1.0 >/dev/null
+git push -q origin :refs/tags/v0.1.0
+export RELEASE_TARGET="$(git rev-parse HEAD)" MOCK_API_MODE=missing RELEASE_DRAFT=false
+run_case
+if grep -qx -- '--draft' "$MOCK_ARGS"; then echo "Unexpected --draft" >&2; exit 1; fi
+
+echo "Draft option creates a draft release"
+git tag -d v0.1.0 >/dev/null
+git push -q origin :refs/tags/v0.1.0
+export RELEASE_DRAFT=true
+run_case
+grep -qx -- '--draft' "$MOCK_ARGS"
+
+echo "Invalid draft value is rejected"
+export RELEASE_DRAFT=invalid
+if run_case >/dev/null 2>&1; then echo "Expected invalid draft to fail" >&2; exit 1; fi
+export RELEASE_DRAFT=false
 
 echo "Explicit body on a new release"
 git tag -d v0.1.0 >/dev/null
