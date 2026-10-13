@@ -17,6 +17,10 @@ inputs:
     description: Whether this release is a prerelease
     required: false
     default: 'false'
+  draft:
+    description: Whether to create a draft release (default false)
+    required: false
+    default: 'false'
   release-notes-start-tag:
     description: Tag from which generated release notes begin
     required: false
@@ -60,6 +64,7 @@ runs:
         RELEASE_TARGET: ${{ inputs.target }}
         RELEASE_TITLE: ${{ inputs.title }}
         RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+        RELEASE_DRAFT: ${{ inputs.draft }}
         NOTES_START_TAG: ${{ inputs.release-notes-start-tag }}
         RELEASE_BODY: ${{ inputs.body }}
         RELEASE_BODY_FILE: ${{ inputs.body-file }}
