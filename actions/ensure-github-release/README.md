@@ -24,6 +24,7 @@ steps:
       tag: v1.2.3
       target: ${{ github.sha }}
       prerelease: 'false'
+      draft: 'true' # Optional; defaults to false
 ```
 
 The action reference is illustrative; use a published version or commit SHA.
@@ -37,8 +38,8 @@ only when generating notes. Existing releases retain their current notes.
 
 ## Behavior
 
-* Missing release: creates it, optionally creating the tag, using explicit or generated notes.
-* Existing release: preserves its metadata and returns its identity.
+* Missing release: creates it, optionally creating the tag, using explicit or generated notes. By default the release is published; `draft: 'true'` creates a draft.
+* Existing release: preserves its metadata (including the draft/published state) and returns its identity. The `draft` input applies only on creation.
 * Existing tag pointing to another commit: fails without moving the tag.
 * API lookup errors other than a verified HTTP 404: fail closed.
 * Verifies the tag's resolved commit after creation/reuse.
