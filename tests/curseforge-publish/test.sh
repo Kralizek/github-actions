@@ -267,6 +267,38 @@ class Tests(unittest.TestCase):
                 with self.subTest(key=key), self.assertRaises(cf.PublicationError):
                     cf.run(invalid)
 
+
+    def test_catalogs_are_fetched_once_per_multi_version_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"zip")
+            env = self.environment(artifact, Path(directory) / "output")
+            env.update(CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="",
+                       CF_GAME_VERSIONS=json.dumps([
+                           {"version": "12.1.5", "type": "retail"},
+                           {"version": "1.60.1", "type": "classic"},
+                           {"version": "12-1-5", "type": "retail"},
+                       ]), CF_DRY_RUN="true")
+            calls = []
+            def fetch(url, token):
+                calls.append(url)
+                return self.lookup(url, token)
+            with patch.object(cf, "request_json", side_effect=fetch):
+                cf.run(env)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(len(set(calls)), 2)
+            outputs = dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())
+            self.assertEqual([row["versionId"] for row in json.loads(outputs["game-versions"])],
+                             [16984, 17053, 16984])
+
+    def test_errors_cannot_inject_workflow_commands(self):
+        suspicious = "bad%\\n::warning::injected\\r::set-output name=x::bad"
+        message = cf.error_message(cf.PublicationError(suspicious))
+        self.assertTrue(message.startswith("CurseForge publish error: "))
+        self.assertEqual(len(message.splitlines()), 1)
+        self.assertIn(r"\\n::warning::injected", message)
+        self.assertNotIn("\\n::warning::injected", message)
+
     def test_http_failure_is_not_retried(self):
         import urllib.error
         request = __import__("urllib.request", fromlist=["Request"]).Request("https://wow.curseforge.com/api/game/versions")
