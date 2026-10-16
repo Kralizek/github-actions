@@ -22,6 +22,7 @@ The goal of this repository is to centralize automation that is genuinely common
 | [.NET build and test](actions/dotnet-build/README.md) | Opinionated checkout, SDK setup, restore, format, build, and test primitive for .NET repositories. |
 | [Validate GitHub release](actions/validate-release/README.md) | Strictly validates a SemVer release tag, its target commit, and the GitHub prerelease flag. |
 | [Ensure GitHub release](actions/ensure-github-release/README.md) | Creates or safely reuses a release for an exact tag and commit, with optional prerelease and draft creation. |
+| [Publish to CurseForge](actions/curseforge-publish/README.md) | Resolves exact game-version names/types and uploads prebuilt artifacts through the CurseForge upload API. |
 
 ## Reusable workflows
 
@@ -54,6 +55,7 @@ actions/
   dotnet-build/           # Shared .NET restore/format/build/test primitive
   validate-release/       # Validate SemVer tag and GitHub release metadata
   ensure-github-release/   # Create or reuse published/draft GitHub releases
+  curseforge-publish/      # Publish existing artifacts with discovered game-version IDs
 tests/
   run.sh                   # Discover and run Bash test suites
   <suite>/test.sh          # Behavioral tests for shared actions/workflows
