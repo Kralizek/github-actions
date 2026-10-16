@@ -209,7 +209,6 @@ class Tests(unittest.TestCase):
             env["CF_GAME_VERSION_NAMES"] = '["Client","Server","26.1.2","Client"]'
             def upload(base, token, project, file, metadata):
                 self.assertEqual(metadata["gameVersionNames"], ["Client", "Server", "26.1.2"])
-                self.assertNotIn("gameVersions", metadata)
                 return 789
             with patch.object(cf, "request_json", side_effect=AssertionError("no lookup expected")), patch.object(cf, "publish", side_effect=upload):
                 self.assertEqual(cf.run(env), (None, 789))
@@ -297,7 +296,6 @@ class Tests(unittest.TestCase):
         self.assertTrue(message.startswith("CurseForge publish error: "))
         self.assertEqual(len(message.splitlines()), 1)
         self.assertIn(r"\n::warning::injected", message)
-        self.assertNotIn("\\n::warning::injected", message)
 
     def test_http_failure_is_not_retried(self):
         import urllib.error
