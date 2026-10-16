@@ -67,15 +67,9 @@ inputs:
     default: 'false'
 
 outputs:
-  game-version-id:
-    description: Resolved CurseForge game version ID
-    value: ${{ steps.publish.outputs.game-version-id }}
-  game-version-names:
-    description: JSON array of literal version names submitted to CurseForge
-    value: ${{ steps.publish.outputs.game-version-names }}
-  game-version-ids:
-    description: Comma-separated list of resolved CurseForge game version IDs
-    value: ${{ steps.publish.outputs.game-version-ids }}
+  game-versions:
+    description: JSON array of version references, each with type (id or name) and id (numeric version ID or literal name)
+    value: ${{ steps.publish.outputs.game-versions }}
   file-id:
     description: Uploaded CurseForge file ID (empty for dry runs)
     value: ${{ steps.publish.outputs.file-id }}
