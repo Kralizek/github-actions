@@ -98,7 +98,7 @@ Uploads use a streaming multipart body with an exact Content-Length. The action 
 | `relations` | No | JSON array of `{slug/projectID,type}` project relationships |
 | `parent-file-id` | No | Positive parent file ID for child uploads (must omit version selectors) |
 | `manual-release` | No | If `true`, hold file for manual release after approval |
-| `game-version-id` | No | Explicit numeric override; skips discovery |
+| `game-version-id` | No | Alternative explicit numeric ID for the singular mode; cannot be combined with `game-version` or `game-version-type` |
 | `file` | Yes | Non-empty local artifact path |
 | `release-type` | Yes | `alpha`, `beta`, or `release` |
 | `display-name` | No | Friendly published file name |
@@ -128,7 +128,7 @@ Native `game-version-names` inputs do not resolve IDs:
 ]
 ```
 
-An explicit ID without a name produces `{"versionId":16984}`. Output entries retain their input order and identity, including entries that resolve to the same ID; only the IDs sent to CurseForge are deduplicated. Child-file uploads return `[]`. Dry runs produce the same version array as normal uploads.
+An explicit ID without a name produces `{"versionId":16984}`. Selectors that specify a numeric ID cannot also specify `version` or `type`: conflicting fields are rejected before upload. Output entries retain their input order and identity, including entries that resolve to the same ID; only the IDs sent to CurseForge are deduplicated. Child-file uploads return `[]`. Dry runs produce the same version array as normal uploads.
 
 - `game-versions`: flat JSON array with optional `version`, optional `type`, and `versionId` when available.
 - `file-id`: published CurseForge file ID; empty for dry runs.
@@ -139,7 +139,7 @@ An explicit ID without a name produces `{"versionId":16984}`. Output entries ret
 - The action matches version names/slugs **exactly**, case-insensitively. A missing or ambiguous version is an error, not an opportunity to guess the latest.
 - Callers decide whether to publish, manage release markers, and ensure idempotency. **Uploading is not intrinsically idempotent.** The action makes no automatic retries, because a network failure after server acceptance has an ambiguous outcome. Before retrying, callers should reconcile against CurseForge's published files.
 - The action does not infer game version from TOC or artifact name, and does not derive WoW interface numbers.
-- Python 3 is required on the runner; no external Python packages are required.
+- Python 3.8+ is required on the runner; no external Python packages are required.
 - `dry-run` still performs remote discovery unless an explicit version ID is supplied. It does not verify CurseForge project upload permissions.
 
 ## API reference
