@@ -103,7 +103,7 @@ def publish(base, token, project_id, artifact, metadata):
     # Content-Length is known; no chunked transfer or full-file buffering required.
     header, footer, content_type = multipart_parts(metadata, artifact)
     endpoint = f"/api/projects/{project_id}/upload-file"
-    connection = http.client.HTTPSConnection(base.removeprefix("https://"), timeout=120)
+    connection = http.client.HTTPSConnection(base[len("https://"):] if base.startswith("https://") else base, timeout=120)
     try:
         connection.putrequest("POST", endpoint)
         connection.putheader("X-Api-Token", token)
@@ -146,6 +146,8 @@ def parse_version_selectors(env):
     primary_version = env.get("CF_GAME_VERSION", "").strip()
     primary_id = env.get("CF_GAME_VERSION_ID", "").strip()
     primary_type = env.get("CF_GAME_VERSION_TYPE", "").strip()
+    if primary_id and primary_version:
+        raise PublicationError("CF_GAME_VERSION_ID and CF_GAME_VERSION are mutually exclusive")
     if primary_type and not primary_version:
         raise PublicationError("CF_GAME_VERSION_TYPE requires CF_GAME_VERSION")
     if (primary_version or primary_id or primary_type) and extra:
@@ -164,6 +166,8 @@ def parse_version_selectors(env):
     for index, selector in enumerate(selectors):
         if not all(isinstance(selector[field], (str, int)) for field in ("version", "type", "id")):
             raise PublicationError(f"Version selector {index} has invalid fields")
+        if str(selector["id"]).strip() and (str(selector["version"]).strip() or str(selector["type"]).strip()):
+            raise PublicationError(f"Version selector {index} cannot mix id with version or type")
         if not str(selector["version"]).strip() and not str(selector["id"]).strip():
             raise PublicationError(f"Version selector {index} needs version or id")
     return selectors
