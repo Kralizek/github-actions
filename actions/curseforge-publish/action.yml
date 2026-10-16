@@ -12,19 +12,36 @@ inputs:
     description: CurseForge game endpoint (for example wow)
     required: true
   game-version:
-    description: Exact game version name or slug
-    required: true
+    description: Optional primary exact game version name or slug (use game-versions for multi-tag uploads)
+    required: false
+    default: ''
+  game-versions:
+    description: JSON array of additional version selectors, e.g. [{"version":"1.21.1","type":"Minecraft 1.21"},{"version":"Fabric"},{"version":"Java 21"}]
+    required: false
+    default: '[]'
   game-version-type:
     description: Version type name, slug, or numeric ID; required when version is ambiguous
     required: false
     default: ''
   game-version-id:
-    description: Explicit positive numeric version ID override (bypasses discovery)
+    description: Explicit positive numeric version ID override for the primary version (bypasses discovery)
     required: false
     default: ''
   file:
     description: Path to the already-built release artifact
     required: true
+  relations:
+    description: JSON array of project relationships (slug or projectID and type)
+    required: false
+    default: '[]'
+  parent-file-id:
+    description: Parent file ID for an additional file; incompatible with gameVersions
+    required: false
+    default: ''
+  manual-release:
+    description: Hold publication until manual release after approval
+    required: false
+    default: 'false'
   release-type:
     description: alpha, beta, or release
     required: true
@@ -49,6 +66,9 @@ outputs:
   game-version-id:
     description: Resolved CurseForge game version ID
     value: ${{ steps.publish.outputs.game-version-id }}
+  game-version-ids:
+    description: Comma-separated list of resolved CurseForge game version IDs
+    value: ${{ steps.publish.outputs.game-version-ids }}
   file-id:
     description: Uploaded CurseForge file ID (empty for dry runs)
     value: ${{ steps.publish.outputs.file-id }}
@@ -65,6 +85,10 @@ runs:
         CF_GAME: ${{ inputs.game }}
         CF_GAME_VERSION: ${{ inputs.game-version }}
         CF_GAME_VERSION_TYPE: ${{ inputs.game-version-type }}
+        CF_GAME_VERSIONS: ${{ inputs.game-versions }}
+        CF_RELATIONS: ${{ inputs.relations }}
+        CF_PARENT_FILE_ID: ${{ inputs.parent-file-id }}
+        CF_MANUAL_RELEASE: ${{ inputs.manual-release }}
         CF_GAME_VERSION_ID: ${{ inputs.game-version-id }}
         CF_FILE: ${{ inputs.file }}
         CF_RELEASE_TYPE: ${{ inputs.release-type }}
