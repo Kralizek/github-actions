@@ -54,14 +54,20 @@ def exact(value, candidate):
     return isinstance(candidate, str) and candidate.casefold() == value.casefold()
 
 
-def resolve_version(base, token, version, version_type):
-    versions = request_json(base + "/api/game/versions", token)
+def resolve_version(base, token, version, version_type, catalogs=None):
+    if catalogs is None:
+        catalogs = {}
+    if "versions" not in catalogs:
+        catalogs["versions"] = request_json(base + "/api/game/versions", token)
+    versions = catalogs["versions"]
     if not isinstance(versions, list):
         raise PublicationError("Unexpected CurseForge versions response")
     candidates = [row for row in versions if isinstance(row, dict) and
                   (exact(version, row.get("name")) or exact(version, row.get("slug")))]
     if version_type:
-        types = request_json(base + "/api/game/version-types", token)
+        if "types" not in catalogs:
+            catalogs["types"] = request_json(base + "/api/game/version-types", token)
+        types = catalogs["types"]
         if not isinstance(types, list):
             raise PublicationError("Unexpected CurseForge version types response")
         matches = [row for row in types if isinstance(row, dict) and
@@ -226,6 +232,7 @@ def run(env):
         raise PublicationError("At least one game version is required for a standalone file")
     base = f"https://{game}.curseforge.com"
     ids = []
+    catalogs = {}
     version_outputs = []
     for selector in selectors:
         value = str(selector["id"]).strip()
@@ -233,7 +240,7 @@ def run(env):
             version_id = positive_id(value, "game version ID")
         else:
             version_id = resolve_version(base, token, str(selector["version"]).strip(),
-                                         str(selector["type"]).strip())
+                                         str(selector["type"]).strip(), catalogs)
         if version_id not in ids:
             ids.append(version_id)
         output_entry = {}
@@ -278,5 +285,5 @@ if __name__ == "__main__":
     try:
         run(os.environ)
     except (PublicationError, OSError) as exc:
-        print(f"::error::{exc}", file=sys.stderr)
+        print(f"CurseForge publish error: {str(exc).replace(chr(13), repr(chr(13))).replace(chr(10), repr(chr(10))}", file=sys.stderr)
         sys.exit(1)
