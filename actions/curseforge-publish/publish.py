@@ -3,6 +3,7 @@
 
 No implicit retry: an interrupted upload may already have succeeded.
 """
+import http.client
 import json
 import os
 from pathlib import Path
@@ -79,33 +80,52 @@ def resolve_version(base, token, version, version_type):
     return positive_id(str(candidates[0].get("id", "")), "resolved game version ID")
 
 
-def make_multipart(metadata, artifact):
+def multipart_parts(metadata, artifact):
     boundary = "curseforge-" + uuid.uuid4().hex
     filename = artifact.name.replace('"', "").replace("\r", "").replace("\n", "")
-    parts = [
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"metadata\"\r\n\r\n".encode(),
-        json.dumps(metadata, ensure_ascii=False).encode(),
-        b"\r\n",
-        f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: application/zip\r\n\r\n".encode(),
-        artifact.read_bytes(),
-        b"\r\n",
-        f"--{boundary}--\r\n".encode(),
-    ]
-    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+    header = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n'.encode()
+        + json.dumps(metadata, ensure_ascii=False).encode("utf-8")
+        + f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+          'Content-Type: application/octet-stream\r\n\r\n'.encode()
+    )
+    footer = f'\r\n--{boundary}--\r\n'.encode()
+    return header, footer, f"multipart/form-data; boundary={boundary}"
 
 
 def publish(base, token, project_id, artifact, metadata):
-    body, content_type = make_multipart(metadata, artifact)
-    request = urllib.request.Request(
-        f"{base}/api/projects/{project_id}/upload-file",
-        data=body,
-        method="POST",
-        headers={"X-Api-Token": token, "Accept": "application/json",
-                 "Content-Type": content_type},
-    )
-    result = fetch_json(request)
+    # Content-Length is known; no chunked transfer or full-file buffering required.
+    header, footer, content_type = multipart_parts(metadata, artifact)
+    endpoint = f"/api/projects/{project_id}/upload-file"
+    connection = http.client.HTTPSConnection(base.removeprefix("https://"), timeout=120)
+    try:
+        connection.putrequest("POST", endpoint)
+        connection.putheader("X-Api-Token", token)
+        connection.putheader("Accept", "application/json")
+        connection.putheader("Content-Type", content_type)
+        connection.putheader("Content-Length", str(len(header) + artifact.stat().st_size + len(footer)))
+        connection.endheaders()
+        connection.send(header)
+        with artifact.open("rb") as stream:
+            while True:
+                chunk = stream.read(1024 * 1024)
+                if not chunk:
+                    break
+                connection.send(chunk)
+        connection.send(footer)
+        response = connection.getresponse()
+        if not 200 <= response.status < 300:
+            raise PublicationError(f"CurseForge upload HTTP {response.status}; verify files before retrying")
+        try:
+            result = json.load(response)
+        except (ValueError, UnicodeError) as error:
+            raise PublicationError("Invalid upload response; verify files before retrying") from error
+    except (OSError, TimeoutError, http.client.HTTPException) as error:
+        raise PublicationError("Upload outcome unknown; verify CurseForge files before retrying") from error
+    finally:
+        connection.close()
     if not isinstance(result, dict):
-        raise PublicationError("Unexpected upload response")
+        raise PublicationError("Unexpected upload response; verify files before retrying")
     return positive_id(str(result.get("id", "")), "uploaded file ID")
 
 
@@ -138,6 +158,16 @@ def parse_version_selectors(env):
         if not str(selector["version"]).strip() and not str(selector["id"]).strip():
             raise PublicationError(f"Version selector {index} needs version or id")
     return selectors
+
+
+def parse_version_names(env):
+    try:
+        names = json.loads(env.get("CF_GAME_VERSION_NAMES", "[]"))
+    except ValueError as error:
+        raise PublicationError("CF_GAME_VERSION_NAMES must be a JSON array") from error
+    if not isinstance(names, list) or any(not isinstance(n, str) or not n.strip() for n in names):
+        raise PublicationError("CF_GAME_VERSION_NAMES must contain nonempty strings")
+    return list(dict.fromkeys(names))
 
 
 def parse_relations(env):
@@ -181,10 +211,15 @@ def run(env):
     parent_raw = env.get("CF_PARENT_FILE_ID", "").strip()
     parent_file_id = positive_id(parent_raw, "CF_PARENT_FILE_ID") if parent_raw else None
     selectors = parse_version_selectors(env)
+    names = parse_version_names(env)
+    if names and selectors:
+        raise PublicationError("CF_GAME_VERSION_NAMES and ID-resolving selectors are mutually exclusive")
+    if names and env.get("CF_GAME_VERSION_TYPE", "").strip():
+        raise PublicationError("CF_GAME_VERSION_TYPE cannot disambiguate native names")
     relations = parse_relations(env)
-    if parent_file_id and selectors:
+    if parent_file_id and (selectors or names):
         raise PublicationError("CurseForge does not support gameVersions with parentFileID")
-    if not parent_file_id and not selectors:
+    if not parent_file_id and not (selectors or names):
         raise PublicationError("At least one game version is required for a standalone file")
     base = f"https://{game}.curseforge.com"
     ids = []
@@ -206,6 +241,8 @@ def run(env):
         }
         if ids:
             metadata["gameVersions"] = ids
+        if names:
+            metadata["gameVersionNames"] = names
         if parent_file_id:
             metadata["parentFileID"] = parent_file_id
         if relations:
@@ -221,6 +258,7 @@ def run(env):
             file.write(f"game-version-id={ids[0] if ids else ''}\n")
             file.write(f"game-version-ids={','.join(str(v) for v in ids)}\n")
             file.write(f"file-id={file_id or ''}\n")
+            file.write(f"game-version-names={json.dumps(names)}\n")
     print(f"CurseForge game version IDs: {ids}")
     print("Dry run: no file uploaded" if file_id is None else f"CurseForge file ID: {file_id}")
     return ids[0] if ids else None, file_id
