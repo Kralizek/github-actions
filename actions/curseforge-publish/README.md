@@ -108,10 +108,24 @@ Uploads use a streaming multipart body with an exact Content-Length. The action 
 
 ## Outputs
 
-- `game-version-id`: first matched CurseForge version ID (for single-version callers).
-- `game-version-ids`: all resolved CurseForge version IDs, comma-separated.
-- `game-version-names`: JSON array of direct names when that mode is used.
-- `file-id`: new published file ID; empty during dry-run.
+The action always returns one `game-versions` JSON array, regardless of which version-selection input was used. Each entry contains `type` (`id` or `name`) and `id` (a numeric CurseForge ID or literal version name).
+
+Resolved version IDs (singular or plural inputs):
+
+```json
+[{"type":"id","id":16984}]
+```
+
+Native version names:
+
+```json
+[{"type":"name","id":"Client"},{"type":"name","id":"Server"}]
+```
+
+Child-file uploads return `[]`, because their compatibility comes from the parent. Dry runs return the same version references as normal uploads.
+
+- `game-versions`: structured JSON array described above.
+- `file-id`: published CurseForge file ID; empty for dry runs.
 
 ## Safety and responsibilities
 
