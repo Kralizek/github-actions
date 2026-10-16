@@ -139,10 +139,13 @@ def parse_version_selectors(env):
     selectors = []
     primary_version = env.get("CF_GAME_VERSION", "").strip()
     primary_id = env.get("CF_GAME_VERSION_ID", "").strip()
-    if (primary_version or primary_id) and extra:
+    primary_type = env.get("CF_GAME_VERSION_TYPE", "").strip()
+    if primary_type and not primary_version:
+        raise PublicationError("CF_GAME_VERSION_TYPE requires CF_GAME_VERSION")
+    if (primary_version or primary_id or primary_type) and extra:
         raise PublicationError("CF_GAME_VERSION/CF_GAME_VERSION_ID and CF_GAME_VERSIONS are mutually exclusive")
     if primary_version or primary_id:
-        selectors.append({"version": primary_version, "type": env.get("CF_GAME_VERSION_TYPE", "").strip(),
+        selectors.append({"version": primary_version, "type": primary_type,
                           "id": primary_id})
     for index, value in enumerate(extra):
         if isinstance(value, str):
