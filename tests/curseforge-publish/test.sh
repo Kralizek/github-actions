@@ -101,7 +101,7 @@ class Tests(unittest.TestCase):
             env["CF_RELATIONS"] = json.dumps([{"slug": "fabric-api", "type": "requiredDependency"}])
             env["CF_MANUAL_RELEASE"] = "true"
             mapping = {"1.21.1": 111, "Fabric": 222, "Java 21": 333, "Server": 444}
-            def fake_resolve(base, token, version, version_type):
+            def fake_resolve(base, token, version, version_type, catalogs=None):
                 self.assertEqual(base, "https://minecraft.curseforge.com")
                 if version == "1.21.1":
                     self.assertEqual(version_type, "Minecraft 1.21")
@@ -296,7 +296,7 @@ class Tests(unittest.TestCase):
         message = cf.error_message(cf.PublicationError(suspicious))
         self.assertTrue(message.startswith("CurseForge publish error: "))
         self.assertEqual(len(message.splitlines()), 1)
-        self.assertIn(r"\\n::warning::injected", message)
+        self.assertIn(r"\n::warning::injected", message)
         self.assertNotIn("\\n::warning::injected", message)
 
     def test_http_failure_is_not_retried(self):
