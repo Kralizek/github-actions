@@ -235,6 +235,8 @@ def run(env):
                                          str(selector["type"]).strip())
         if version_id not in ids:
             ids.append(version_id)
+    version_outputs = ([{"type": "id", "id": value} for value in ids]
+                       + [{"type": "name", "id": value} for value in names])
     file_id = None
     if dry_run != "true":
         metadata = {
@@ -258,10 +260,8 @@ def run(env):
     output = env.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as file:
-            file.write(f"game-version-id={ids[0] if ids else ''}\n")
-            file.write(f"game-version-ids={','.join(str(v) for v in ids)}\n")
-            file.write(f"file-id={file_id or ''}\n")
-            file.write(f"game-version-names={json.dumps(names)}\n")
+            file.write(f"game-versions={json.dumps(version_outputs, separators=(',', ':'))}\\n")
+            file.write(f"file-id={file_id or ''}\\n")
     print(f"CurseForge game version IDs: {ids}")
     print("Dry run: no file uploaded" if file_id is None else f"CurseForge file ID: {file_id}")
     return ids[0] if ids else None, file_id
