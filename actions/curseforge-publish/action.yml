@@ -19,6 +19,10 @@ inputs:
     description: JSON array of additional version selectors, e.g. [{"version":"1.21.1","type":"Minecraft 1.21"},{"version":"Fabric"},{"version":"Java 21"}]
     required: false
     default: '[]'
+  game-version-names:
+    description: JSON array of literal version names sent directly to CurseForge, exclusive with version ID resolution
+    required: false
+    default: '[]'
   game-version-type:
     description: Version type name, slug, or numeric ID; required when version is ambiguous
     required: false
@@ -66,6 +70,9 @@ outputs:
   game-version-id:
     description: Resolved CurseForge game version ID
     value: ${{ steps.publish.outputs.game-version-id }}
+  game-version-names:
+    description: JSON array of literal version names submitted to CurseForge
+    value: ${{ steps.publish.outputs.game-version-names }}
   game-version-ids:
     description: Comma-separated list of resolved CurseForge game version IDs
     value: ${{ steps.publish.outputs.game-version-ids }}
@@ -86,6 +93,7 @@ runs:
         CF_GAME_VERSION: ${{ inputs.game-version }}
         CF_GAME_VERSION_TYPE: ${{ inputs.game-version-type }}
         CF_GAME_VERSIONS: ${{ inputs.game-versions }}
+        CF_GAME_VERSION_NAMES: ${{ inputs.game-version-names }}
         CF_RELATIONS: ${{ inputs.relations }}
         CF_PARENT_FILE_ID: ${{ inputs.parent-file-id }}
         CF_MANUAL_RELEASE: ${{ inputs.manual-release }}
