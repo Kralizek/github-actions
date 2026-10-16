@@ -132,10 +132,25 @@ class Tests(unittest.TestCase):
             artifact = Path(directory) / "mod.jar"
             artifact.write_bytes(b"jar")
             env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION"] = ""
             env["CF_GAME_VERSIONS"] = '[{"id":16984},"12.1.5"]'
             with patch.object(cf, "resolve_version", return_value=16984), patch.object(cf, "publish", return_value=777):
                 self.assertEqual(cf.run(env), (16984, 777))
             self.assertIn("game-version-ids=16984", Path(env["GITHUB_OUTPUT"]).read_text())
+
+    def test_singular_plural_mutual_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSIONS"] = '["Fabric"]'
+            with patch.object(cf, "resolve_version", side_effect=AssertionError("must fail before lookup")):
+                with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                    cf.run(env)
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_ID"] = "42"
+            with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                cf.run(env)
 
     def test_malformed_multi_tag_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
