@@ -283,7 +283,7 @@ def run(env):
 
 def error_message(error):
     # Never emit untrusted exception text as a GitHub workflow command.
-    return "CurseForge publish error: " + str(error).replace("\\r", "\\\\r").replace("\\n", "\\\\n")
+    return "CurseForge publish error: " + str(error).replace("\r", "\\r").replace("\n", "\\n")
 
 
 if __name__ == "__main__":
