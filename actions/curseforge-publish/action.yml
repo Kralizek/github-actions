@@ -16,7 +16,7 @@ inputs:
     required: false
     default: ''
   game-versions:
-    description: JSON array of additional version selectors, e.g. [{"version":"1.21.1","type":"Minecraft 1.21"},{"version":"Fabric"},{"version":"Java 21"}]
+    description: Alternative JSON array of version selectors (mutually exclusive with singular inputs), e.g. [{"version":"1.21.1","type":"Minecraft 1.21"},{"version":"Fabric"},{"version":"Java 21"}]
     required: false
     default: '[]'
   game-version-names:
@@ -24,7 +24,7 @@ inputs:
     required: false
     default: '[]'
   game-version-type:
-    description: Version type name, slug, or numeric ID; required when version is ambiguous
+    description: Version type name, slug, or numeric ID; only valid with game-version
     required: false
     default: ''
   game-version-id:
