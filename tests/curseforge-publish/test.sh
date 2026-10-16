@@ -173,6 +173,7 @@ class Tests(unittest.TestCase):
             artifact.write_bytes(b"jar")
             env = self.environment(artifact, Path(directory) / "out")
             env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSION_NAMES"] = '["Client","Server","26.1.2","Client"]'
             def upload(base, token, project, file, metadata):
                 self.assertEqual(metadata["gameVersionNames"], ["Client", "Server", "26.1.2"])
