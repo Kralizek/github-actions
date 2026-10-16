@@ -79,11 +79,11 @@ class Tests(unittest.TestCase):
             artifact.write_bytes(b"x")
             output = Path(directory) / "output"
             env = self.environment(artifact, output)
-            env.update(CF_DRY_RUN="true", CF_GAME_VERSION_ID="16984")
+            env.update(CF_DRY_RUN="true", CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="", CF_GAME_VERSION_ID="16984")
             with patch.object(cf, "request_json", side_effect=AssertionError("should not discover")), patch.object(cf, "publish", side_effect=AssertionError("should not publish")):
                 self.assertEqual(cf.run(env), (16984, None))
             self.assertIn("file-id=\n", output.read_text())
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"version": "12.1.5", "type": "retail", "versionId": 16984}])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"versionId": 16984}])
 
     def test_minecraft_multi_tag_upload(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -296,6 +296,36 @@ class Tests(unittest.TestCase):
         self.assertTrue(message.startswith("CurseForge publish error: "))
         self.assertEqual(len(message.splitlines()), 1)
         self.assertIn(r"\n::warning::injected", message)
+
+
+    def test_conflicting_selectors_rejected_before_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"zip")
+            baseline = self.environment(artifact, Path(directory) / "out")
+            scenarios = (
+                {"CF_GAME_VERSION_ID": "16984"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"version":"1.21.1"}]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"type":"retail"}]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"version":"12.1.5","type":"retail"}]'},
+            )
+            for updates in scenarios:
+                env = dict(baseline, **updates)
+                with self.subTest(updates=updates), patch.object(
+                    cf, "request_json", side_effect=AssertionError("must not query")
+                ), patch.object(cf, "publish", side_effect=AssertionError("must not publish")):
+                    with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive|cannot mix"):
+                        cf.run(env)
+
+    def test_publish_uses_legacy_python_compatible_hostname_parsing(self):
+        # The implementation must not depend on str.removeprefix (Python 3.9+).
+        import inspect
+        source = inspect.getsource(cf.publish)
+        self.assertNotIn("removeprefix", source)
+        self.assertIn('base.startswith("https://")', source)
 
     def test_http_failure_is_not_retried(self):
         import urllib.error
