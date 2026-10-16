@@ -84,6 +84,74 @@ class Tests(unittest.TestCase):
                 self.assertEqual(cf.run(env), (16984, None))
             self.assertIn("file-id=\n", output.read_text())
 
+    def test_minecraft_multi_tag_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"compiled mod")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME"] = "minecraft"
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSIONS"] = json.dumps([
+                {"version": "1.21.1", "type": "Minecraft 1.21"},
+                {"version": "Fabric"}, {"version": "Java 21"},
+                {"version": "Server"}
+            ])
+            env["CF_RELATIONS"] = json.dumps([{"slug": "fabric-api", "type": "requiredDependency"}])
+            env["CF_MANUAL_RELEASE"] = "true"
+            mapping = {"1.21.1": 111, "Fabric": 222, "Java 21": 333, "Server": 444}
+            def fake_resolve(base, token, version, version_type):
+                self.assertEqual(base, "https://minecraft.curseforge.com")
+                if version == "1.21.1":
+                    self.assertEqual(version_type, "Minecraft 1.21")
+                return mapping[version]
+            def fake_publish(base, token, project_id, file, metadata):
+                self.assertEqual(metadata["gameVersions"], [111, 222, 333, 444])
+                self.assertEqual(metadata["relations"]["projects"][0]["slug"], "fabric-api")
+                self.assertTrue(metadata["isMarkedForManualRelease"])
+                return 987
+            with patch.object(cf, "resolve_version", side_effect=fake_resolve), patch.object(cf, "publish", side_effect=fake_publish):
+                self.assertEqual(cf.run(env), (111, 987))
+            self.assertIn("game-version-ids=111,222,333,444", Path(env["GITHUB_OUTPUT"]).read_text())
+
+    def test_additional_file_and_invalid_combination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "server.zip"
+            artifact.write_bytes(b"server")
+            env = self.environment(artifact, Path(directory) / "out")
+            env.update(CF_GAME="kerbal", CF_GAME_VERSION="", CF_GAME_VERSIONS="[]",
+                       CF_PARENT_FILE_ID="4321")
+            with patch.object(cf, "publish", side_effect=lambda base, token, project, file, metadata:
+                              (self.assertEqual(metadata["parentFileID"], 4321) or 777)):
+                self.assertEqual(cf.run(env), (None, 777))
+            env["CF_GAME_VERSION"] = "1.0"
+            with self.assertRaisesRegex(cf.PublicationError, "does not support gameVersions"):
+                cf.run(env)
+
+    def test_duplicate_versions_are_deduplicated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSIONS"] = '[{"id":16984},"12.1.5"]'
+            with patch.object(cf, "resolve_version", return_value=16984), patch.object(cf, "publish", return_value=777):
+                self.assertEqual(cf.run(env), (16984, 777))
+            self.assertIn("game-version-ids=16984", Path(env["GITHUB_OUTPUT"]).read_text())
+
+    def test_malformed_multi_tag_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            for key, value in (("CF_GAME_VERSIONS", "{}"),
+                               ("CF_GAME_VERSIONS", '[{"unexpected":"value"}]'),
+                               ("CF_GAME_VERSIONS", '[{}]'),
+                               ("CF_RELATIONS", '[{"slug":"foo","type":"invalid"}]'),
+                               ("CF_MANUAL_RELEASE", "maybe")):
+                invalid = dict(env)
+                invalid[key] = value
+                with self.subTest(key=key), self.assertRaises(cf.PublicationError):
+                    cf.run(invalid)
+
     def test_validation(self):
         with tempfile.TemporaryDirectory() as directory:
             artifact = Path(directory) / "addon.zip"
