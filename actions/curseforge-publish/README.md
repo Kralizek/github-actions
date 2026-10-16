@@ -62,6 +62,28 @@ with:
 
 CurseForge does not permit the `gameVersions` field on a child file, so omit all version selectors for that case.
 
+## Native version names (optional)
+
+CurseForge also accepts `gameVersionNames` directly in upload metadata:
+
+```yaml
+- name: Publish with literal version names
+  uses: Kralizek/github-actions/actions/curseforge-publish@v0.1.0
+  with:
+    token: ${{ secrets.CURSEFORGE_API_TOKEN }}
+    project-id: ${{ vars.CURSEFORGE_PROJECT_ID }}
+    game: minecraft
+    game-version-names: '["Client","Server","26.1.2"]'
+    file: dist/my-mod.jar
+    release-type: beta
+```
+
+This bypasses version-ID discovery. **The upload API documents the field but does not document ambiguity handling for names shared across version types.** Prefer ID resolution (`game-version` or `game-versions`) when exact type identity is important. All three modes are mutually exclusive, and child uploads use none.
+
+## Streaming and upload safety
+
+Uploads use a streaming multipart body with an exact Content-Length. The action reads the artifact in 1 MiB chunks, not into memory all at once, and uses `application/octet-stream` so JARs and other file types work. The action does not automatically retry uncertain uploads; verify CurseForge publication state before retrying.
+
 ## Inputs
 
 | Name | Required | Description |
@@ -71,7 +93,8 @@ CurseForge does not permit the `gameVersions` field on a child file, so omit all
 | `game` | Yes | Game endpoint slug, e.g. `wow` |
 | `game-version` | Conditional | Optional primary exact version name/slug, e.g. `12.1.5` |
 | `game-version-type` | No | Version-type name, slug or numeric ID; disambiguates the primary version |
-| `game-versions` | No | JSON array of additional selectors: strings or `{version,type}` / `{id}` objects |
+| `game-versions` | No | Alternative full JSON array of selectors: strings or `{version,type}` / `{id}` objects |
+| `game-version-names` | No | Alternative direct JSON array of literal names, sent without discovery |
 | `relations` | No | JSON array of `{slug/projectID,type}` project relationships |
 | `parent-file-id` | No | Positive parent file ID for child uploads (must omit version selectors) |
 | `manual-release` | No | If `true`, hold file for manual release after approval |
@@ -86,6 +109,7 @@ CurseForge does not permit the `gameVersions` field on a child file, so omit all
 ## Outputs
 
 - `game-version-id`: first matched CurseForge version ID (for single-version callers).\n- `game-version-ids`: all resolved CurseForge version IDs, comma-separated.
+- `game-version-names`: JSON array of direct names when that mode is used.
 - `file-id`: new published file ID; empty during dry-run.
 
 ## Safety and responsibilities
