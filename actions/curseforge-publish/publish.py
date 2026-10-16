@@ -281,9 +281,14 @@ def run(env):
     return ids[0] if ids else None, file_id
 
 
+def error_message(error):
+    # Never emit untrusted exception text as a GitHub workflow command.
+    return "CurseForge publish error: " + str(error).replace("\\r", "\\\\r").replace("\\n", "\\\\n")
+
+
 if __name__ == "__main__":
     try:
         run(os.environ)
     except (PublicationError, OSError) as exc:
-        print(f"CurseForge publish error: {str(exc).replace(chr(13), repr(chr(13))).replace(chr(10), repr(chr(10))}", file=sys.stderr)
+        print(error_message(exc), file=sys.stderr)
         sys.exit(1)
