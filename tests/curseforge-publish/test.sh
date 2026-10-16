@@ -70,7 +70,7 @@ class Tests(unittest.TestCase):
                 return 777
             with patch.object(cf, "request_json", side_effect=self.lookup), patch.object(cf, "publish", side_effect=fake_upload):
                 self.assertEqual(cf.run(env), (16984, 777))
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"type": "id", "id": 16984}])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"version": "12.1.5", "type": "retail", "versionId": 16984}])
             self.assertIn("file-id=777", output.read_text())
 
     def test_dry_run_and_override(self):
@@ -83,7 +83,7 @@ class Tests(unittest.TestCase):
             with patch.object(cf, "request_json", side_effect=AssertionError("should not discover")), patch.object(cf, "publish", side_effect=AssertionError("should not publish")):
                 self.assertEqual(cf.run(env), (16984, None))
             self.assertIn("file-id=\n", output.read_text())
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"type": "id", "id": 16984}])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"version": "12.1.5", "type": "retail", "versionId": 16984}])
 
     def test_minecraft_multi_tag_upload(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -113,7 +113,7 @@ class Tests(unittest.TestCase):
                 return 987
             with patch.object(cf, "resolve_version", side_effect=fake_resolve), patch.object(cf, "publish", side_effect=fake_publish):
                 self.assertEqual(cf.run(env), (111, 987))
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"type": "id", "id": n} for n in (111, 222, 333, 444)])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"version": name, **({"type": "Minecraft 1.21"} if name == "1.21.1" else {}), "versionId": n} for name, n in zip(("1.21.1", "Fabric", "Java 21", "Server"), (111, 222, 333, 444))])
 
     def test_additional_file_and_invalid_combination(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -140,7 +140,7 @@ class Tests(unittest.TestCase):
             env["CF_GAME_VERSIONS"] = '[{"id":16984},"12.1.5"]'
             with patch.object(cf, "resolve_version", return_value=16984), patch.object(cf, "publish", return_value=777):
                 self.assertEqual(cf.run(env), (16984, 777))
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"type": "id", "id": 16984}])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"versionId": 16984}, {"version": "12.1.5", "versionId": 16984}])
 
     def test_orphan_version_type_is_rejected_before_io(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -213,7 +213,7 @@ class Tests(unittest.TestCase):
                 return 789
             with patch.object(cf, "request_json", side_effect=AssertionError("no lookup expected")), patch.object(cf, "publish", side_effect=upload):
                 self.assertEqual(cf.run(env), (None, 789))
-            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"type": "name", "id": name} for name in ("Client", "Server", "26.1.2")])
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"version": name} for name in ("Client", "Server", "26.1.2")])
 
     def test_native_names_conflict_with_id_resolution(self):
         with tempfile.TemporaryDirectory() as directory:
