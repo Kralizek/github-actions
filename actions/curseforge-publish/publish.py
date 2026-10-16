@@ -109,13 +109,59 @@ def publish(base, token, project_id, artifact, metadata):
     return positive_id(str(result.get("id", "")), "uploaded file ID")
 
 
+def parse_version_selectors(env):
+    try:
+        extra = json.loads(env.get("CF_GAME_VERSIONS", "[]"))
+    except ValueError as exc:
+        raise PublicationError("CF_GAME_VERSIONS must be a JSON array") from exc
+    if not isinstance(extra, list):
+        raise PublicationError("CF_GAME_VERSIONS must be a JSON array")
+    selectors = []
+    primary_version = env.get("CF_GAME_VERSION", "").strip()
+    primary_id = env.get("CF_GAME_VERSION_ID", "").strip()
+    if primary_version or primary_id:
+        selectors.append({"version": primary_version, "type": env.get("CF_GAME_VERSION_TYPE", "").strip(),
+                          "id": primary_id})
+    for index, value in enumerate(extra):
+        if isinstance(value, str):
+            selectors.append({"version": value, "type": "", "id": ""})
+        elif isinstance(value, dict) and set(value) <= {"version", "type", "id"}:
+            selectors.append({"version": value.get("version", ""), "type": value.get("type", ""),
+                              "id": value.get("id", "")})
+        else:
+            raise PublicationError(f"Invalid version selector at index {index}")
+    for index, selector in enumerate(selectors):
+        if not all(isinstance(selector[field], (str, int)) for field in ("version", "type", "id")):
+            raise PublicationError(f"Version selector {index} has invalid fields")
+        if not str(selector["version"]).strip() and not str(selector["id"]).strip():
+            raise PublicationError(f"Version selector {index} needs version or id")
+    return selectors
+
+
+def parse_relations(env):
+    try:
+        relations = json.loads(env.get("CF_RELATIONS", "[]"))
+    except ValueError as exc:
+        raise PublicationError("CF_RELATIONS must be JSON") from exc
+    if not isinstance(relations, list):
+        raise PublicationError("CF_RELATIONS must be a JSON array")
+    allowed = {"embeddedLibrary", "incompatible", "optionalDependency", "requiredDependency", "tool"}
+    for relation in relations:
+        if not isinstance(relation, dict) or set(relation) - {"slug", "projectID", "type"}:
+            raise PublicationError("Invalid relation entry")
+        if relation.get("type") not in allowed:
+            raise PublicationError("Invalid relation type")
+        if not relation.get("slug") and not relation.get("projectID"):
+            raise PublicationError("Relation must identify a project")
+    return relations
+
+
 def run(env):
     token = required(env, "CURSEFORGE_TOKEN")
     game = required(env, "CF_GAME")
     if not re.fullmatch(r"[a-z0-9-]+", game):
         raise PublicationError("CF_GAME must be a CurseForge endpoint slug")
     project_id = positive_id(required(env, "CF_PROJECT_ID"), "CF_PROJECT_ID")
-    version = required(env, "CF_GAME_VERSION")
     release_type = required(env, "CF_RELEASE_TYPE")
     if release_type not in ("alpha", "beta", "release"):
         raise PublicationError("CF_RELEASE_TYPE must be alpha, beta, or release")
@@ -123,36 +169,59 @@ def run(env):
     if changelog_type not in ("text", "html", "markdown"):
         raise PublicationError("CF_CHANGELOG_TYPE must be text, html, or markdown")
     dry_run = env.get("CF_DRY_RUN", "false").lower()
-    if dry_run not in ("true", "false"):
-        raise PublicationError("CF_DRY_RUN must be true or false")
+    manual_release = env.get("CF_MANUAL_RELEASE", "false").lower()
+    if dry_run not in ("true", "false") or manual_release not in ("true", "false"):
+        raise PublicationError("CF_DRY_RUN and CF_MANUAL_RELEASE must be true or false")
     artifact = Path(required(env, "CF_FILE"))
     if not artifact.is_file() or not artifact.stat().st_size:
         raise PublicationError("CF_FILE must refer to a nonempty regular file")
-    if env.get("CF_GAME_VERSION_ID", "").strip():
-        version_id = positive_id(env["CF_GAME_VERSION_ID"].strip(), "CF_GAME_VERSION_ID")
-    else:
-        version_id = resolve_version(
-            f"https://{game}.curseforge.com", token, version, env.get("CF_GAME_VERSION_TYPE", "").strip()
-        )
+
+    parent_raw = env.get("CF_PARENT_FILE_ID", "").strip()
+    parent_file_id = positive_id(parent_raw, "CF_PARENT_FILE_ID") if parent_raw else None
+    selectors = parse_version_selectors(env)
+    relations = parse_relations(env)
+    if parent_file_id and selectors:
+        raise PublicationError("CurseForge does not support gameVersions with parentFileID")
+    if not parent_file_id and not selectors:
+        raise PublicationError("At least one game version is required for a standalone file")
+    base = f"https://{game}.curseforge.com"
+    ids = []
+    for selector in selectors:
+        value = str(selector["id"]).strip()
+        if value:
+            version_id = positive_id(value, "game version ID")
+        else:
+            version_id = resolve_version(base, token, str(selector["version"]).strip(),
+                                         str(selector["type"]).strip())
+        if version_id not in ids:
+            ids.append(version_id)
     file_id = None
     if dry_run != "true":
         metadata = {
-            "gameVersions": [version_id],
             "releaseType": release_type,
             "changelog": env.get("CF_CHANGELOG", ""),
             "changelogType": changelog_type,
         }
+        if ids:
+            metadata["gameVersions"] = ids
+        if parent_file_id:
+            metadata["parentFileID"] = parent_file_id
+        if relations:
+            metadata["relations"] = {"projects": relations}
+        if manual_release == "true":
+            metadata["isMarkedForManualRelease"] = True
         if env.get("CF_DISPLAY_NAME", ""):
             metadata["displayName"] = env["CF_DISPLAY_NAME"]
-        file_id = publish(f"https://{game}.curseforge.com", token, project_id, artifact, metadata)
+        file_id = publish(base, token, project_id, artifact, metadata)
     output = env.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as file:
-            file.write(f"game-version-id={version_id}\n")
-            file.write(f"file-id={file_id or ''}\n")
-    print(f"CurseForge game version ID: {version_id}")
+            file.write(f"game-version-id={ids[0] if ids else ''}\\n")
+            file.write(f"game-version-ids={','.join(str(v) for v in ids)}\\n")
+            file.write(f"file-id={file_id or ''}\\n")
+    print(f"CurseForge game version IDs: {ids}")
     print("Dry run: no file uploaded" if file_id is None else f"CurseForge file ID: {file_id}")
-    return version_id, file_id
+    return ids[0] if ids else None, file_id
 
 
 if __name__ == "__main__":
