@@ -46,7 +46,7 @@ The above is an **illustrative future consumer**: the action must first be relea
     release-type: beta
 ```
 
-The example version tags and version-type labels are **illustrative** and must be checked against the target game's live CurseForge catalog. Each selector is resolved independently, exact matches are required, and duplicate IDs are removed. The exact version type may differ between Minecraft releases; it is **not** necessarily a single stable `minecraft` type.
+The example version tags and version-type labels are **illustrative** and must be checked against the target game's live CurseForge catalog. Each selector is resolved independently, exact matches are required, and duplicate IDs are removed. The singular `game-version` (with optional `game-version-type` or `game-version-id`) and plural `game-versions` inputs are **mutually exclusive**. The exact version type may differ between Minecraft releases; it is **not** necessarily a single stable `minecraft` type.
 
 For optional child files:
 
@@ -90,7 +90,7 @@ CurseForge does not permit the `gameVersions` field on a child file, so omit all
 
 ## Safety and responsibilities
 
-- A standalone upload needs at least one version selector. Use `game-versions` for Minecraft-style multi-tag uploads. A child file instead needs `parent-file-id` and must omit all version selectors.\n- The action matches version names/slugs **exactly**, case-insensitively. A missing or ambiguous version is an error, not an opportunity to guess the latest.
+- A standalone upload needs at least one version selector. Use either the singular inputs or `game-versions`, never both. Use `game-versions` for Minecraft-style multi-tag uploads. A child file instead needs `parent-file-id` and must omit all version selectors.\n- The action matches version names/slugs **exactly**, case-insensitively. A missing or ambiguous version is an error, not an opportunity to guess the latest.
 - Callers decide whether to publish, manage release markers, and ensure idempotency. **Uploading is not intrinsically idempotent.** The action makes no automatic retries, because a network failure after server acceptance has an ambiguous outcome. Before retrying, callers should reconcile against CurseForge's published files.
 - The action does not infer game version from TOC or artifact name, and does not derive WoW interface numbers.
 - Python 3 is required on the runner; no external Python packages are required.
