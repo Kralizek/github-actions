@@ -92,7 +92,7 @@ Uploads use a streaming multipart body with an exact Content-Length. The action 
 | `project-id` | Yes | Positive CurseForge project ID |
 | `game` | Yes | Game endpoint slug, e.g. `wow` |
 | `game-version` | Conditional | Optional primary exact version name/slug, e.g. `12.1.5` |
-| `game-version-type` | No | Version-type name, slug or numeric ID; disambiguates the primary version |
+| `game-version-type` | No | Version-type name, slug or numeric ID; only valid with `game-version` |
 | `game-versions` | No | Alternative full JSON array of selectors: strings or `{version,type}` / `{id}` objects |
 | `game-version-names` | No | Alternative direct JSON array of literal names, sent without discovery |
 | `relations` | No | JSON array of `{slug/projectID,type}` project relationships |
@@ -108,13 +108,15 @@ Uploads use a streaming multipart body with an exact Content-Length. The action 
 
 ## Outputs
 
-- `game-version-id`: first matched CurseForge version ID (for single-version callers).\n- `game-version-ids`: all resolved CurseForge version IDs, comma-separated.
+- `game-version-id`: first matched CurseForge version ID (for single-version callers).
+- `game-version-ids`: all resolved CurseForge version IDs, comma-separated.
 - `game-version-names`: JSON array of direct names when that mode is used.
 - `file-id`: new published file ID; empty during dry-run.
 
 ## Safety and responsibilities
 
-- A standalone upload needs at least one version selector. Use either the singular inputs or `game-versions`, never both. Use `game-versions` for Minecraft-style multi-tag uploads. A child file instead needs `parent-file-id` and must omit all version selectors.\n- The action matches version names/slugs **exactly**, case-insensitively. A missing or ambiguous version is an error, not an opportunity to guess the latest.
+- A standalone upload needs at least one version selector. Use exactly one mode: singular `game-version` inputs, resolved `game-versions`, or direct `game-version-names`. Use `game-versions` for Minecraft-style multi-tag uploads. A child file instead needs `parent-file-id` and must omit all version selectors.
+- The action matches version names/slugs **exactly**, case-insensitively. A missing or ambiguous version is an error, not an opportunity to guess the latest.
 - Callers decide whether to publish, manage release markers, and ensure idempotency. **Uploading is not intrinsically idempotent.** The action makes no automatic retries, because a network failure after server acceptance has an ambiguous outcome. Before retrying, callers should reconcile against CurseForge's published files.
 - The action does not infer game version from TOC or artifact name, and does not derive WoW interface numbers.
 - Python 3 is required on the runner; no external Python packages are required.
