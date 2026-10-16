@@ -14,16 +14,16 @@ The action uses the CurseForge author/upload API (`X-Api-Token`, not the public 
     token: ${{ secrets.CURSEFORGE_API_TOKEN }}
     project-id: ${{ vars.CURSEFORGE_PROJECT_ID }}
     game: wow
-    game-version: ${{ matrix.version }}
-    game-version-type: ${{ matrix.metadata.curseforge.versionType || matrix.id }}
-    file: authoritative/${{ matrix.asset }}
-    release-type: ${{ inputs.channel == 'stable' && 'release' || inputs.channel }}
-    display-name: Artisan Logbook ${{ needs.release.outputs.version }} (${{ matrix.id }})
-    changelog: ${{ steps.authoritative.outputs.notes }}
+    game-version: '12.1.5'
+    game-version-type: retail
+    file: dist/my-addon.zip
+    release-type: beta
+    display-name: My Addon 1.0.0-beta.1
+    changelog: 'Bug fixes and improvements'
     changelog-type: markdown
 ```
 
-The above is an **illustrative future consumer**: the action must first be released under an actual tag. Your own matrix structure is caller-owned. For a flavor config, default the provider's version type to the flavor ID unless overridden; do not hardcode CurseForge IDs in source control.
+The example uses literal values for clarity. Replace them with your workflow's variables or matrix values as appropriate. The action must be released under an actual tag before using the shown version.
 
 ## Minecraft example: multiple compatibility dimensions
 
