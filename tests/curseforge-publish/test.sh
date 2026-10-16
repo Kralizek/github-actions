@@ -91,6 +91,7 @@ class Tests(unittest.TestCase):
             env = self.environment(artifact, Path(directory) / "out")
             env["CF_GAME"] = "minecraft"
             env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSIONS"] = json.dumps([
                 {"version": "1.21.1", "type": "Minecraft 1.21"},
                 {"version": "Fabric"}, {"version": "Java 21"},
@@ -118,7 +119,7 @@ class Tests(unittest.TestCase):
             artifact = Path(directory) / "server.zip"
             artifact.write_bytes(b"server")
             env = self.environment(artifact, Path(directory) / "out")
-            env.update(CF_GAME="kerbal", CF_GAME_VERSION="", CF_GAME_VERSIONS="[]",
+            env.update(CF_GAME="kerbal", CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="", CF_GAME_VERSIONS="[]",
                        CF_PARENT_FILE_ID="4321")
             with patch.object(cf, "publish", side_effect=lambda base, token, project, file, metadata:
                               (self.assertEqual(metadata["parentFileID"], 4321) or 777)):
@@ -133,10 +134,37 @@ class Tests(unittest.TestCase):
             artifact.write_bytes(b"jar")
             env = self.environment(artifact, Path(directory) / "out")
             env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSIONS"] = '[{"id":16984},"12.1.5"]'
             with patch.object(cf, "resolve_version", return_value=16984), patch.object(cf, "publish", return_value=777):
                 self.assertEqual(cf.run(env), (16984, 777))
             self.assertIn("game-version-ids=16984", Path(env["GITHUB_OUTPUT"]).read_text())
+
+    def test_orphan_version_type_is_rejected_before_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            baseline = self.environment(artifact, Path(directory) / "out")
+            for changes in (
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSIONS": '["Fabric"]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSION_NAMES": '["Client"]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_PARENT_FILE_ID": "42"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSION_ID": "16984"},
+            ):
+                env = dict(baseline)
+                env.update(changes)
+                with self.subTest(changes=changes), patch.object(
+                    cf, "resolve_version", side_effect=AssertionError("must not resolve")
+                ), patch.object(
+                    cf, "publish", side_effect=AssertionError("must not publish")
+                ):
+                    with self.assertRaisesRegex(cf.PublicationError, "requires CF_GAME_VERSION"):
+                        cf.run(env)
 
     def test_singular_plural_mutual_exclusion(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -148,6 +176,7 @@ class Tests(unittest.TestCase):
                 with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
                     cf.run(env)
             env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSION_ID"] = "42"
             with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
                 cf.run(env)
@@ -174,6 +203,7 @@ class Tests(unittest.TestCase):
             env = self.environment(artifact, Path(directory) / "out")
             env["CF_GAME_VERSION"] = ""
             env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSION_NAMES"] = '["Client","Server","26.1.2","Client"]'
             def upload(base, token, project, file, metadata):
                 self.assertEqual(metadata["gameVersionNames"], ["Client", "Server", "26.1.2"])
@@ -192,8 +222,9 @@ class Tests(unittest.TestCase):
             with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
                 cf.run(env)
             env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
             env["CF_GAME_VERSION_TYPE"] = "retail"
-            with self.assertRaisesRegex(cf.PublicationError, "cannot disambiguate"):
+            with self.assertRaisesRegex(cf.PublicationError, "requires CF_GAME_VERSION"):
                 cf.run(env)
 
     def test_streaming_upload_chunks(self):
