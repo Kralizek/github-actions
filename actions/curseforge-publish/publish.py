@@ -226,6 +226,7 @@ def run(env):
         raise PublicationError("At least one game version is required for a standalone file")
     base = f"https://{game}.curseforge.com"
     ids = []
+    version_outputs = []
     for selector in selectors:
         value = str(selector["id"]).strip()
         if value:
@@ -235,8 +236,14 @@ def run(env):
                                          str(selector["type"]).strip())
         if version_id not in ids:
             ids.append(version_id)
-    version_outputs = ([{"type": "id", "id": value} for value in ids]
-                       + [{"type": "name", "id": value} for value in names])
+        output_entry = {}
+        if str(selector["version"]).strip():
+            output_entry["version"] = str(selector["version"]).strip()
+        if str(selector["type"]).strip():
+            output_entry["type"] = str(selector["type"]).strip()
+        output_entry["versionId"] = version_id
+        version_outputs.append(output_entry)
+    version_outputs.extend({"version": name} for name in names)
     file_id = None
     if dry_run != "true":
         metadata = {
