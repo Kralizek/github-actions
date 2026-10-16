@@ -68,7 +68,7 @@ inputs:
 
 outputs:
   game-versions:
-    description: JSON array of version references, each with type (id or name) and id (numeric version ID or literal name)
+    description: JSON array of flat selectors containing original version/type where supplied and numeric versionId when available
     value: ${{ steps.publish.outputs.game-versions }}
   file-id:
     description: Uploaded CurseForge file ID (empty for dry runs)
