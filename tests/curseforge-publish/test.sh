@@ -62,10 +62,10 @@ class Tests(unittest.TestCase):
                 self.assertEqual(metadata["releaseType"], "beta")
                 self.assertEqual(metadata["changelog"], "Hello")
                 self.assertEqual(metadata["displayName"], "My addon")
-                body, content_type = cf.make_multipart(metadata, file)
-                self.assertIn(b"sample zip contents", body)
-                self.assertIn(b'name="metadata"', body)
-                self.assertIn(b'name="file"', body)
+                header, footer, content_type = cf.multipart_parts(metadata, file)
+                self.assertIn(b'name="metadata"', header)
+                self.assertIn(b'name="file"', header)
+                self.assertTrue(footer.endswith(b"--\r\n"))
                 self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
                 return 777
             with patch.object(cf, "request_json", side_effect=self.lookup), patch.object(cf, "publish", side_effect=fake_upload):
@@ -166,6 +166,59 @@ class Tests(unittest.TestCase):
                 invalid[key] = value
                 with self.subTest(key=key), self.assertRaises(cf.PublicationError):
                     cf.run(invalid)
+
+    def test_native_version_names_without_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_NAMES"] = '["Client","Server","26.1.2","Client"]'
+            def upload(base, token, project, file, metadata):
+                self.assertEqual(metadata["gameVersionNames"], ["Client", "Server", "26.1.2"])
+                self.assertNotIn("gameVersions", metadata)
+                return 789
+            with patch.object(cf, "request_json", side_effect=AssertionError("no lookup expected")), patch.object(cf, "publish", side_effect=upload):
+                self.assertEqual(cf.run(env), (None, 789))
+            self.assertIn("game-version-names=", Path(env["GITHUB_OUTPUT"]).read_text())
+
+    def test_native_names_conflict_with_id_resolution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION_NAMES"] = '["Client"]'
+            with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                cf.run(env)
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = "retail"
+            with self.assertRaisesRegex(cf.PublicationError, "cannot disambiguate"):
+                cf.run(env)
+
+    def test_streaming_upload_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "large-mod.jar"
+            artifact.write_bytes(b"x" * (2 * 1024 * 1024 + 17))
+            class FakeResponse:
+                status = 200
+                def read(self, n=-1):
+                    return b'{"id":12345}'
+            class FakeConnection:
+                def __init__(self, *args, **kwargs):
+                    self.headers = {}
+                    self.sizes = []
+                def putrequest(self, *args): pass
+                def putheader(self, key, value): self.headers[key] = value
+                def endheaders(self): pass
+                def send(self, data): self.sizes.append(len(data))
+                def getresponse(self): return FakeResponse()
+                def close(self): pass
+            connection = FakeConnection()
+            with patch.object(cf.http.client, "HTTPSConnection", return_value=connection):
+                self.assertEqual(cf.publish("https://minecraft.curseforge.com", "secret", 42, artifact, {"gameVersionNames": ["Client"]}), 12345)
+            self.assertLessEqual(max(connection.sizes), 1024 * 1024)
+            self.assertEqual(sum(connection.sizes), int(connection.headers["Content-Length"]))
+            self.assertGreaterEqual(sum(1 for size in connection.sizes if size == 1024 * 1024), 2)
 
     def test_validation(self):
         with tempfile.TemporaryDirectory() as directory:
