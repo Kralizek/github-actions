@@ -28,7 +28,7 @@ inputs:
     required: false
     default: ''
   game-version-id:
-    description: Explicit positive numeric version ID override for the primary version (bypasses discovery)
+    description: Alternative explicit numeric version ID for single-version mode (cannot combine with game-version or game-version-type)
     required: false
     default: ''
   file:
