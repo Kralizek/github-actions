@@ -335,5 +335,108 @@ class Tests(unittest.TestCase):
                 cf.fetch_json(request)
             self.assertEqual(call.call_count, 1)
 
+
+    def test_relation_identifiers(self):
+        valid = [
+            {"slug": "fabric-api", "type": "requiredDependency"},
+            {"projectID": 42, "type": "optionalDependency"},
+            {"slug": "fabric-api", "projectID": "42", "type": "tool"},
+        ]
+        self.assertEqual(cf.parse_relations({"CF_RELATIONS": json.dumps(valid)}), [
+            valid[0], {"projectID": "42", "type": "optionalDependency"}, valid[2]
+        ])
+        for invalid in (
+            {"slug": 42, "type": "requiredDependency"},
+            {"slug": " ", "type": "requiredDependency"},
+            {"projectID": -1, "type": "requiredDependency"},
+            {"projectID": True, "type": "requiredDependency"},
+            {"projectID": "abc", "type": "requiredDependency"},
+            {"projectID": 0, "type": "requiredDependency"},
+            {"type": "requiredDependency"},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(cf.PublicationError):
+                cf.parse_relations({"CF_RELATIONS": json.dumps([invalid])})
+
+    def test_real_http_multipart_roundtrip(self):
+        from email.parser import BytesParser
+        from email.policy import default
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import http.client
+        import threading
+
+        received = []
+        payload = b"\\x00\\x01binary" + bytes(range(256)) + b"\\xff"
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers["Content-Length"])
+                body = self.rfile.read(length)
+                received.append((self.path, self.headers, body))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"id":888}')
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                artifact = Path(directory) / "binnary-test.jar"
+                artifact.write_bytes(payload)
+                metadata = {"releaseType": "beta", "gameVersions": [16984],
+                            "changelog": "Unicode: \\u00e4"}
+                with patch.object(cf.http.client, "HTTPSConnection",
+                                  side_effect=lambda *args, **kwargs: http.client.HTTPConnection(
+                                      "127.0.0.1", server.server_port, timeout=5)):
+                    self.assertEqual(cf.publish("https://wow.curseforge.com", "secret",
+                                                123, artifact, metadata), 888)
+            self.assertEqual(len(received), 1)
+            path, headers, body = received[0]
+            self.assertEqual(path, "/api/projects/123/upload-file")
+            self.assertEqual(int(headers["Content-Length"]), len(body))
+            self.assertEqual(headers["X-Api-Token"], "secret")
+            parsed = BytesParser(policy=default).parsebytes(
+                b"Content-Type: " + headers["Content-Type"].encode() +
+                b"\\r\\nMIME-Version: 1.0\\r\\n\\r\\n" + body)
+            self.assertTrue(parsed.is_multipart())
+            parts = list(parsed.iter_parts())
+            self.assertEqual(len(parts), 2)
+            self.assertEqual(parts[0].get_param("name", header="content-disposition"), "metadata")
+            self.assertEqual(json.loads(parts[0].get_payload(decode=True)), metadata)
+            self.assertEqual(parts[1].get_param("name", header="content-disposition"), "file")
+            self.assertEqual(parts[1].get_filename(), "binnary-test.jar")
+            self.assertEqual(parts[1].get_payload(decode=True), payload)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_http_rejection_vs_uncertain_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"artifact")
+            class FakeResponse:
+                def __init__(self, status):
+                    self.status = status
+            class FakeConnection:
+                def __init__(self, status):
+                    self.status = status
+                def putrequest(self, *args): pass
+                def putheader(self, *args): pass
+                def endheaders(self): pass
+                def send(self, *args): pass
+                def getresponse(self): return FakeResponse(self.status)
+                def close(self): pass
+            for status, expected in ((400, "rejected"), (403, "rejected"),
+                                     (408, "verify published files"),
+                                     (429, "rejected"), (500, "verify published files")):
+                with self.subTest(status=status), patch.object(
+                    cf.http.client, "HTTPSConnection", return_value=FakeConnection(status)
+                ):
+                    with self.assertRaisesRegex(cf.PublicationError, expected):
+                        cf.publish("https://wow.curseforge.com", "secret", 123, artifact, {})
+
 unittest.main()
 PY
