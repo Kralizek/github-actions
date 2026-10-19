@@ -365,7 +365,7 @@ class Tests(unittest.TestCase):
         import threading
 
         received = []
-        payload = b"\\x00\\x01binary" + bytes(range(256)) + b"\\xff"
+        payload = b"\x00\x01binary" + bytes(range(256)) + b"\xff"
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
                 length = int(self.headers["Content-Length"])
@@ -386,7 +386,7 @@ class Tests(unittest.TestCase):
                 artifact = Path(directory) / "binnary-test.jar"
                 artifact.write_bytes(payload)
                 metadata = {"releaseType": "beta", "gameVersions": [16984],
-                            "changelog": "Unicode: \\u00e4"}
+                            "changelog": "Unicode: \u00e4"}
                 with patch.object(cf.http.client, "HTTPSConnection",
                                   side_effect=lambda *args, **kwargs: http.client.HTTPConnection(
                                       "127.0.0.1", server.server_port, timeout=5)):
@@ -399,7 +399,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(headers["X-Api-Token"], "secret")
             parsed = BytesParser(policy=default).parsebytes(
                 b"Content-Type: " + headers["Content-Type"].encode() +
-                b"\\r\\nMIME-Version: 1.0\\r\\n\\r\\n" + body)
+                b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
             self.assertTrue(parsed.is_multipart())
             parts = list(parsed.iter_parts())
             self.assertEqual(len(parts), 2)
