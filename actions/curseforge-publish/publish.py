@@ -121,7 +121,11 @@ def publish(base, token, project_id, artifact, metadata):
         connection.send(footer)
         response = connection.getresponse()
         if not 200 <= response.status < 300:
-            raise PublicationError(f"CurseForge upload HTTP {response.status}; verify files before retrying")
+            if 400 <= response.status < 500 and response.status not in (408,):
+                raise PublicationError(
+                    f"CurseForge upload rejected (HTTP {response.status}); correct the request before retrying")
+            raise PublicationError(
+                f"CurseForge upload HTTP {response.status}; verify published files before retrying")
         try:
             result = json.load(response)
         except (ValueError, UnicodeError) as error:
@@ -196,7 +200,15 @@ def parse_relations(env):
             raise PublicationError("Invalid relation entry")
         if relation.get("type") not in allowed:
             raise PublicationError("Invalid relation type")
-        if not relation.get("slug") and not relation.get("projectID"):
+        slug = relation.get("slug")
+        project_id = relation.get("projectID")
+        if slug is not None and (not isinstance(slug, str) or not slug.strip()):
+            raise PublicationError("Relation slug must be a nonempty string")
+        if project_id is not None:
+            if isinstance(project_id, bool) or not re.fullmatch(r"[0-9]+", str(project_id)) or int(project_id) <= 0:
+                raise PublicationError("Relation projectID must be a positive integer")
+            relation["projectID"] = str(project_id)
+        if slug is None and project_id is None:
             raise PublicationError("Relation must identify a project")
     return relations
 
