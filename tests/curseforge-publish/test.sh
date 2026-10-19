@@ -1,0 +1,457 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+python3 - <<'PY'
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location("cf", "actions/curseforge-publish/publish.py")
+cf = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cf)
+
+VERSIONS = [
+    {"id": 16984, "name": "12.1.5", "slug": "12-1-5", "gameVersionTypeID": 10},
+    {"id": 99999, "name": "12.1.5", "slug": "12-1-5", "gameVersionTypeID": 20},
+    {"id": 17053, "name": "1.60.1", "slug": "1-60-1", "gameVersionTypeID": 20},
+]
+TYPES = [
+    {"id": 10, "name": "Retail", "slug": "retail"},
+    {"id": 20, "name": "Classic", "slug": "classic"},
+]
+
+class Tests(unittest.TestCase):
+    def lookup(self, url, token):
+        return TYPES if url.endswith("/version-types") else VERSIONS
+
+    def test_resolution_and_ambiguity(self):
+        with patch.object(cf, "request_json", side_effect=self.lookup):
+            self.assertEqual(cf.resolve_version("https://wow.curseforge.com", "secret", "12.1.5", "retail"), 16984)
+            self.assertEqual(cf.resolve_version("https://wow.curseforge.com", "secret", "12-1-5", "10"), 16984)
+            self.assertEqual(cf.resolve_version("https://wow.curseforge.com", "secret", "1.60.1", "classic"), 17053)
+            with self.assertRaisesRegex(cf.PublicationError, "matched 2"):
+                cf.resolve_version("https://wow.curseforge.com", "secret", "12.1.5", "")
+            with self.assertRaisesRegex(cf.PublicationError, "matched 0"):
+                cf.resolve_version("https://wow.curseforge.com", "secret", "12.1.6", "retail")
+            with self.assertRaisesRegex(cf.PublicationError, "Version type"):
+                cf.resolve_version("https://wow.curseforge.com", "secret", "12.1.5", "unknown")
+
+    def environment(self, artifact, output):
+        return {
+            "CURSEFORGE_TOKEN": "secret", "CF_PROJECT_ID": "123", "CF_GAME": "wow",
+            "CF_GAME_VERSION": "12.1.5", "CF_GAME_VERSION_TYPE": "retail",
+            "CF_FILE": str(artifact), "CF_RELEASE_TYPE": "beta",
+            "CF_CHANGELOG_TYPE": "markdown", "CF_CHANGELOG": "Hello",
+            "CF_DISPLAY_NAME": "My addon", "GITHUB_OUTPUT": str(output),
+        }
+
+    def test_upload_contract_and_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"sample zip contents")
+            output = Path(directory) / "output"
+            env = self.environment(artifact, output)
+            def fake_upload(base, token, project, file, metadata):
+                self.assertEqual(base, "https://wow.curseforge.com")
+                self.assertEqual((project, metadata["gameVersions"]), (123, [16984]))
+                self.assertEqual(metadata["releaseType"], "beta")
+                self.assertEqual(metadata["changelog"], "Hello")
+                self.assertEqual(metadata["displayName"], "My addon")
+                header, footer, content_type = cf.multipart_parts(metadata, file)
+                self.assertIn(b'name="metadata"', header)
+                self.assertIn(b'name="file"', header)
+                self.assertTrue(footer.endswith(b"--\r\n"))
+                self.assertTrue(content_type.startswith("multipart/form-data; boundary="))
+                return 777
+            with patch.object(cf, "request_json", side_effect=self.lookup), patch.object(cf, "publish", side_effect=fake_upload):
+                self.assertEqual(cf.run(env), (16984, 777))
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"version": "12.1.5", "type": "retail", "versionId": 16984}])
+            self.assertIn("file-id=777", output.read_text())
+
+    def test_dry_run_and_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"x")
+            output = Path(directory) / "output"
+            env = self.environment(artifact, output)
+            env.update(CF_DRY_RUN="true", CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="", CF_GAME_VERSION_ID="16984")
+            with patch.object(cf, "request_json", side_effect=AssertionError("should not discover")), patch.object(cf, "publish", side_effect=AssertionError("should not publish")):
+                self.assertEqual(cf.run(env), (16984, None))
+            self.assertIn("file-id=\n", output.read_text())
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in output.read_text().splitlines())["game-versions"]), [{"versionId": 16984}])
+
+    def test_minecraft_multi_tag_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"compiled mod")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME"] = "minecraft"
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSIONS"] = json.dumps([
+                {"version": "1.21.1", "type": "Minecraft 1.21"},
+                {"version": "Fabric"}, {"version": "Java 21"},
+                {"version": "Server"}
+            ])
+            env["CF_RELATIONS"] = json.dumps([{"slug": "fabric-api", "type": "requiredDependency"}])
+            env["CF_MANUAL_RELEASE"] = "true"
+            mapping = {"1.21.1": 111, "Fabric": 222, "Java 21": 333, "Server": 444}
+            def fake_resolve(base, token, version, version_type, catalogs=None):
+                self.assertEqual(base, "https://minecraft.curseforge.com")
+                if version == "1.21.1":
+                    self.assertEqual(version_type, "Minecraft 1.21")
+                return mapping[version]
+            def fake_publish(base, token, project_id, file, metadata):
+                self.assertEqual(metadata["gameVersions"], [111, 222, 333, 444])
+                self.assertEqual(metadata["relations"]["projects"][0]["slug"], "fabric-api")
+                self.assertTrue(metadata["isMarkedForManualRelease"])
+                return 987
+            with patch.object(cf, "resolve_version", side_effect=fake_resolve), patch.object(cf, "publish", side_effect=fake_publish):
+                self.assertEqual(cf.run(env), (111, 987))
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"version": name, **({"type": "Minecraft 1.21"} if name == "1.21.1" else {}), "versionId": n} for name, n in zip(("1.21.1", "Fabric", "Java 21", "Server"), (111, 222, 333, 444))])
+
+    def test_additional_file_and_invalid_combination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "server.zip"
+            artifact.write_bytes(b"server")
+            env = self.environment(artifact, Path(directory) / "out")
+            env.update(CF_GAME="kerbal", CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="", CF_GAME_VERSIONS="[]",
+                       CF_PARENT_FILE_ID="4321")
+            with patch.object(cf, "publish", side_effect=lambda base, token, project, file, metadata:
+                              (self.assertEqual(metadata["parentFileID"], 4321) or 777)):
+                self.assertEqual(cf.run(env), (None, 777))
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [])
+            env["CF_GAME_VERSION"] = "1.0"
+            with self.assertRaisesRegex(cf.PublicationError, "does not support gameVersions"):
+                cf.run(env)
+
+    def test_duplicate_versions_are_deduplicated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSIONS"] = '[{"id":16984},"12.1.5"]'
+            with patch.object(cf, "resolve_version", return_value=16984), patch.object(cf, "publish", return_value=777):
+                self.assertEqual(cf.run(env), (16984, 777))
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"versionId": 16984}, {"version": "12.1.5", "versionId": 16984}])
+
+    def test_orphan_version_type_is_rejected_before_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            baseline = self.environment(artifact, Path(directory) / "out")
+            for changes in (
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSIONS": '["Fabric"]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSION_NAMES": '["Client"]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_PARENT_FILE_ID": "42"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "retail",
+                 "CF_GAME_VERSION_ID": "16984"},
+            ):
+                env = dict(baseline)
+                env.update(changes)
+                with self.subTest(changes=changes), patch.object(
+                    cf, "resolve_version", side_effect=AssertionError("must not resolve")
+                ), patch.object(
+                    cf, "publish", side_effect=AssertionError("must not publish")
+                ):
+                    with self.assertRaisesRegex(cf.PublicationError, "requires CF_GAME_VERSION"):
+                        cf.run(env)
+
+    def test_singular_plural_mutual_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSIONS"] = '["Fabric"]'
+            with patch.object(cf, "resolve_version", side_effect=AssertionError("must fail before lookup")):
+                with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                    cf.run(env)
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSION_ID"] = "42"
+            with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                cf.run(env)
+
+    def test_malformed_multi_tag_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            for key, value in (("CF_GAME_VERSIONS", "{}"),
+                               ("CF_GAME_VERSIONS", '[{"unexpected":"value"}]'),
+                               ("CF_GAME_VERSIONS", '[{}]'),
+                               ("CF_RELATIONS", '[{"slug":"foo","type":"invalid"}]'),
+                               ("CF_MANUAL_RELEASE", "maybe")):
+                invalid = dict(env)
+                invalid[key] = value
+                with self.subTest(key=key), self.assertRaises(cf.PublicationError):
+                    cf.run(invalid)
+
+    def test_native_version_names_without_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSION_NAMES"] = '["Client","Server","26.1.2","Client"]'
+            def upload(base, token, project, file, metadata):
+                self.assertEqual(metadata["gameVersionNames"], ["Client", "Server", "26.1.2"])
+                return 789
+            with patch.object(cf, "request_json", side_effect=AssertionError("no lookup expected")), patch.object(cf, "publish", side_effect=upload):
+                self.assertEqual(cf.run(env), (None, 789))
+            self.assertEqual(json.loads(dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())["game-versions"]), [{"version": name} for name in ("Client", "Server", "26.1.2")])
+
+    def test_native_names_conflict_with_id_resolution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"jar")
+            env = self.environment(artifact, Path(directory) / "out")
+            env["CF_GAME_VERSION_NAMES"] = '["Client"]'
+            with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive"):
+                cf.run(env)
+            env["CF_GAME_VERSION"] = ""
+            env["CF_GAME_VERSION_TYPE"] = ""
+            env["CF_GAME_VERSION_TYPE"] = "retail"
+            with self.assertRaisesRegex(cf.PublicationError, "requires CF_GAME_VERSION"):
+                cf.run(env)
+
+    def test_streaming_upload_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "large-mod.jar"
+            artifact.write_bytes(b"x" * (2 * 1024 * 1024 + 17))
+            class FakeResponse:
+                status = 200
+                def read(self, n=-1):
+                    return b'{"id":12345}'
+            class FakeConnection:
+                def __init__(self, *args, **kwargs):
+                    self.headers = {}
+                    self.sizes = []
+                def putrequest(self, *args): pass
+                def putheader(self, key, value): self.headers[key] = value
+                def endheaders(self): pass
+                def send(self, data): self.sizes.append(len(data))
+                def getresponse(self): return FakeResponse()
+                def close(self): pass
+            connection = FakeConnection()
+            with patch.object(cf.http.client, "HTTPSConnection", return_value=connection):
+                self.assertEqual(cf.publish("https://minecraft.curseforge.com", "secret", 42, artifact, {"gameVersionNames": ["Client"]}), 12345)
+            self.assertLessEqual(max(connection.sizes), 1024 * 1024)
+            self.assertEqual(sum(connection.sizes), int(connection.headers["Content-Length"]))
+            self.assertGreaterEqual(sum(1 for size in connection.sizes if size == 1024 * 1024), 2)
+
+    def test_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"x")
+            env = self.environment(artifact, Path(directory) / "out")
+            for key, value in (("CF_GAME", "../oops"), ("CF_PROJECT_ID", "0"),
+                               ("CF_RELEASE_TYPE", "stable"), ("CF_DRY_RUN", "maybe"),
+                               ("CF_FILE", "/does-not-exist")):
+                invalid = dict(env)
+                invalid[key] = value
+                with self.subTest(key=key), self.assertRaises(cf.PublicationError):
+                    cf.run(invalid)
+
+
+    def test_catalogs_are_fetched_once_per_multi_version_upload(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"zip")
+            env = self.environment(artifact, Path(directory) / "output")
+            env.update(CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="",
+                       CF_GAME_VERSIONS=json.dumps([
+                           {"version": "12.1.5", "type": "retail"},
+                           {"version": "1.60.1", "type": "classic"},
+                           {"version": "12-1-5", "type": "retail"},
+                       ]), CF_DRY_RUN="true")
+            calls = []
+            def fetch(url, token):
+                calls.append(url)
+                return self.lookup(url, token)
+            with patch.object(cf, "request_json", side_effect=fetch):
+                cf.run(env)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(len(set(calls)), 2)
+            outputs = dict(line.split("=", 1) for line in Path(env["GITHUB_OUTPUT"]).read_text().splitlines())
+            self.assertEqual([row["versionId"] for row in json.loads(outputs["game-versions"])],
+                             [16984, 17053, 16984])
+
+    def test_errors_cannot_inject_workflow_commands(self):
+        suspicious = "bad%\\n::warning::injected\\r::set-output name=x::bad"
+        message = cf.error_message(cf.PublicationError(suspicious))
+        self.assertTrue(message.startswith("CurseForge publish error: "))
+        self.assertEqual(len(message.splitlines()), 1)
+        self.assertIn(r"\n::warning::injected", message)
+
+
+    def test_conflicting_selectors_rejected_before_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "addon.zip"
+            artifact.write_bytes(b"zip")
+            baseline = self.environment(artifact, Path(directory) / "out")
+            scenarios = (
+                {"CF_GAME_VERSION_ID": "16984"},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"version":"1.21.1"}]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"type":"retail"}]'},
+                {"CF_GAME_VERSION": "", "CF_GAME_VERSION_TYPE": "",
+                 "CF_GAME_VERSIONS": '[{"id":16984,"version":"12.1.5","type":"retail"}]'},
+            )
+            for updates in scenarios:
+                env = dict(baseline, **updates)
+                with self.subTest(updates=updates), patch.object(
+                    cf, "request_json", side_effect=AssertionError("must not query")
+                ), patch.object(cf, "publish", side_effect=AssertionError("must not publish")):
+                    with self.assertRaisesRegex(cf.PublicationError, "mutually exclusive|cannot mix"):
+                        cf.run(env)
+
+    def test_publish_uses_legacy_python_compatible_hostname_parsing(self):
+        # The implementation must not depend on str.removeprefix (Python 3.9+).
+        import inspect
+        source = inspect.getsource(cf.publish)
+        self.assertNotIn("removeprefix", source)
+        self.assertIn('base.startswith("https://")', source)
+
+    def test_http_failure_is_not_retried(self):
+        import urllib.error
+        request = __import__("urllib.request", fromlist=["Request"]).Request("https://wow.curseforge.com/api/game/versions")
+        with patch.object(cf.urllib.request, "urlopen", side_effect=urllib.error.HTTPError(request.full_url, 503, "busy", {}, None)) as call:
+            with self.assertRaisesRegex(cf.PublicationError, "HTTP 503"):
+                cf.fetch_json(request)
+            self.assertEqual(call.call_count, 1)
+
+
+    def test_relation_identifiers(self):
+        valid = [
+            {"slug": "fabric-api", "type": "requiredDependency"},
+            {"projectID": 42, "type": "optionalDependency"},
+            {"slug": "fabric-api", "projectID": "42", "type": "tool"},
+        ]
+        self.assertEqual(cf.parse_relations({"CF_RELATIONS": json.dumps(valid)}), [
+            valid[0], {"projectID": "42", "type": "optionalDependency"}, valid[2]
+        ])
+        for invalid in (
+            {"slug": 42, "type": "requiredDependency"},
+            {"slug": " ", "type": "requiredDependency"},
+            {"projectID": -1, "type": "requiredDependency"},
+            {"projectID": True, "type": "requiredDependency"},
+            {"projectID": "abc", "type": "requiredDependency"},
+            {"projectID": 0, "type": "requiredDependency"},
+            {"type": "requiredDependency"},
+            {"slug": "fabric-api", "type": []},
+            {"slug": "fabric-api", "type": {}},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(cf.PublicationError):
+                cf.parse_relations({"CF_RELATIONS": json.dumps([invalid])})
+
+    def test_reject_boolean_version_selector_before_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"artifact")
+            env = self.environment(artifact, Path(directory) / "out")
+            env.update(CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="",
+                       CF_GAME_VERSIONS='[{"id":true}]')
+            with patch.object(cf, "publish", side_effect=AssertionError("must not upload")):
+                with self.assertRaisesRegex(cf.PublicationError, "invalid fields"):
+                    cf.run(env)
+
+    def test_real_http_multipart_roundtrip(self):
+        from email.parser import BytesParser
+        from email.policy import default
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import http.client
+        import threading
+
+        received = []
+        payload = b"\x00\x01binary" + bytes(range(256)) + b"\xff"
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers["Content-Length"])
+                body = self.rfile.read(length)
+                received.append((self.path, self.headers, body))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"id":888}')
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                artifact = Path(directory) / "binnary-test.jar"
+                artifact.write_bytes(payload)
+                metadata = {"releaseType": "beta", "gameVersions": [16984],
+                            "changelog": "Unicode: \u00e4"}
+                with patch.object(cf.http.client, "HTTPSConnection",
+                                  side_effect=lambda *args, **kwargs: http.client.HTTPConnection(
+                                      "127.0.0.1", server.server_port, timeout=5)):
+                    self.assertEqual(cf.publish("https://wow.curseforge.com", "secret",
+                                                123, artifact, metadata), 888)
+            self.assertEqual(len(received), 1)
+            path, headers, body = received[0]
+            self.assertEqual(path, "/api/projects/123/upload-file")
+            self.assertEqual(int(headers["Content-Length"]), len(body))
+            self.assertEqual(headers["X-Api-Token"], "secret")
+            parsed = BytesParser(policy=default).parsebytes(
+                b"Content-Type: " + headers["Content-Type"].encode() +
+                b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+            self.assertTrue(parsed.is_multipart())
+            parts = list(parsed.iter_parts())
+            self.assertEqual(len(parts), 2)
+            self.assertEqual(parts[0].get_param("name", header="content-disposition"), "metadata")
+            self.assertEqual(parts[0].get_content_type(), "application/json")
+            self.assertEqual(parts[0].get_content_charset(), "utf-8")
+            self.assertEqual(json.loads(parts[0].get_payload(decode=True)), metadata)
+            self.assertEqual(parts[1].get_param("name", header="content-disposition"), "file")
+            self.assertEqual(parts[1].get_filename(), "binnary-test.jar")
+            self.assertEqual(parts[1].get_payload(decode=True), payload)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_http_rejection_vs_uncertain_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"artifact")
+            class FakeResponse:
+                def __init__(self, status):
+                    self.status = status
+            class FakeConnection:
+                def __init__(self, status):
+                    self.status = status
+                def putrequest(self, *args): pass
+                def putheader(self, *args): pass
+                def endheaders(self): pass
+                def send(self, *args): pass
+                def getresponse(self): return FakeResponse(self.status)
+                def close(self): pass
+            for status, expected in ((400, "rejected"), (403, "rejected"),
+                                     (408, "verify published files"),
+                                     (429, "rejected"), (500, "verify published files")):
+                with self.subTest(status=status), patch.object(
+                    cf.http.client, "HTTPSConnection", return_value=FakeConnection(status)
+                ):
+                    with self.assertRaisesRegex(cf.PublicationError, expected):
+                        cf.publish("https://wow.curseforge.com", "secret", 123, artifact, {})
+
+unittest.main()
+PY

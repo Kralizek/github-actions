@@ -1,0 +1,101 @@
+name: Publish to CurseForge
+description: Discover CurseForge game version IDs and upload an existing release artifact.
+
+inputs:
+  token:
+    description: CurseForge upload API token
+    required: true
+  project-id:
+    description: CurseForge project ID
+    required: true
+  game:
+    description: CurseForge game endpoint (for example wow)
+    required: true
+  game-version:
+    description: Optional primary exact game version name or slug (use game-versions for multi-tag uploads)
+    required: false
+    default: ''
+  game-versions:
+    description: Alternative JSON array of version selectors (mutually exclusive with singular inputs), e.g. [{"version":"1.21.1","type":"Minecraft 1.21"},{"version":"Fabric"},{"version":"Java 21"}]
+    required: false
+    default: '[]'
+  game-version-names:
+    description: JSON array of literal version names sent directly to CurseForge, exclusive with version ID resolution
+    required: false
+    default: '[]'
+  game-version-type:
+    description: Version type name, slug, or numeric ID; only valid with game-version
+    required: false
+    default: ''
+  game-version-id:
+    description: Alternative explicit numeric version ID for single-version mode (cannot combine with game-version or game-version-type)
+    required: false
+    default: ''
+  file:
+    description: Path to the already-built release artifact
+    required: true
+  relations:
+    description: JSON array of project relationships (slug or projectID and type)
+    required: false
+    default: '[]'
+  parent-file-id:
+    description: Parent file ID for an additional file; incompatible with gameVersions
+    required: false
+    default: ''
+  manual-release:
+    description: Hold publication until manual release after approval
+    required: false
+    default: 'false'
+  release-type:
+    description: alpha, beta, or release
+    required: true
+  display-name:
+    description: CurseForge file display name
+    required: false
+    default: ''
+  changelog:
+    description: Release changelog contents
+    required: false
+    default: ''
+  changelog-type:
+    description: text, html, or markdown
+    required: false
+    default: markdown
+  dry-run:
+    description: Resolve and validate without uploading
+    required: false
+    default: 'false'
+
+outputs:
+  game-versions:
+    description: JSON array of flat selectors containing original version/type where supplied and numeric versionId when available
+    value: ${{ steps.publish.outputs.game-versions }}
+  file-id:
+    description: Uploaded CurseForge file ID (empty for dry runs)
+    value: ${{ steps.publish.outputs.file-id }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve version and publish artifact
+      id: publish
+      shell: bash
+      env:
+        CURSEFORGE_TOKEN: ${{ inputs.token }}
+        CF_PROJECT_ID: ${{ inputs.project-id }}
+        CF_GAME: ${{ inputs.game }}
+        CF_GAME_VERSION: ${{ inputs.game-version }}
+        CF_GAME_VERSION_TYPE: ${{ inputs.game-version-type }}
+        CF_GAME_VERSIONS: ${{ inputs.game-versions }}
+        CF_GAME_VERSION_NAMES: ${{ inputs.game-version-names }}
+        CF_RELATIONS: ${{ inputs.relations }}
+        CF_PARENT_FILE_ID: ${{ inputs.parent-file-id }}
+        CF_MANUAL_RELEASE: ${{ inputs.manual-release }}
+        CF_GAME_VERSION_ID: ${{ inputs.game-version-id }}
+        CF_FILE: ${{ inputs.file }}
+        CF_RELEASE_TYPE: ${{ inputs.release-type }}
+        CF_DISPLAY_NAME: ${{ inputs.display-name }}
+        CF_CHANGELOG: ${{ inputs.changelog }}
+        CF_CHANGELOG_TYPE: ${{ inputs.changelog-type }}
+        CF_DRY_RUN: ${{ inputs.dry-run }}
+      run: python3 "${{ github.action_path }}/publish.py"
