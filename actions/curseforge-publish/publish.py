@@ -90,7 +90,7 @@ def multipart_parts(metadata, artifact):
     boundary = "curseforge-" + uuid.uuid4().hex
     filename = artifact.name.replace('"', "").replace("\r", "").replace("\n", "")
     header = (
-        f'--{boundary}\r\nContent-Disposition: form-data; name="metadata"\r\n\r\n'.encode()
+        f'--{boundary}\r\nContent-Disposition: form-data; name="metadata"\r\nContent-Type: application/json; charset=utf-8\r\n\r\n'.encode()
         + json.dumps(metadata, ensure_ascii=False).encode("utf-8")
         + f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n'
           'Content-Type: application/octet-stream\r\n\r\n'.encode()
@@ -168,7 +168,7 @@ def parse_version_selectors(env):
         else:
             raise PublicationError(f"Invalid version selector at index {index}")
     for index, selector in enumerate(selectors):
-        if not all(isinstance(selector[field], (str, int)) for field in ("version", "type", "id")):
+        if not all(type(selector[field]) in (str, int) for field in ("version", "type", "id")):
             raise PublicationError(f"Version selector {index} has invalid fields")
         if str(selector["id"]).strip() and (str(selector["version"]).strip() or str(selector["type"]).strip()):
             raise PublicationError(f"Version selector {index} cannot mix id with version or type")
@@ -198,7 +198,7 @@ def parse_relations(env):
     for relation in relations:
         if not isinstance(relation, dict) or set(relation) - {"slug", "projectID", "type"}:
             raise PublicationError("Invalid relation entry")
-        if relation.get("type") not in allowed:
+        if not isinstance(relation.get("type"), str) or relation["type"] not in allowed:
             raise PublicationError("Invalid relation type")
         slug = relation.get("slug")
         project_id = relation.get("projectID")
