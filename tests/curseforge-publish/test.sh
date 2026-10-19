@@ -353,9 +353,22 @@ class Tests(unittest.TestCase):
             {"projectID": "abc", "type": "requiredDependency"},
             {"projectID": 0, "type": "requiredDependency"},
             {"type": "requiredDependency"},
+            {"slug": "fabric-api", "type": []},
+            {"slug": "fabric-api", "type": {}},
         ):
             with self.subTest(invalid=invalid), self.assertRaises(cf.PublicationError):
                 cf.parse_relations({"CF_RELATIONS": json.dumps([invalid])})
+
+    def test_reject_boolean_version_selector_before_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "mod.jar"
+            artifact.write_bytes(b"artifact")
+            env = self.environment(artifact, Path(directory) / "out")
+            env.update(CF_GAME_VERSION="", CF_GAME_VERSION_TYPE="",
+                       CF_GAME_VERSIONS='[{"id":true}]')
+            with patch.object(cf, "publish", side_effect=AssertionError("must not upload")):
+                with self.assertRaisesRegex(cf.PublicationError, "invalid fields"):
+                    cf.run(env)
 
     def test_real_http_multipart_roundtrip(self):
         from email.parser import BytesParser
@@ -404,6 +417,8 @@ class Tests(unittest.TestCase):
             parts = list(parsed.iter_parts())
             self.assertEqual(len(parts), 2)
             self.assertEqual(parts[0].get_param("name", header="content-disposition"), "metadata")
+            self.assertEqual(parts[0].get_content_type(), "application/json")
+            self.assertEqual(parts[0].get_content_charset(), "utf-8")
             self.assertEqual(json.loads(parts[0].get_payload(decode=True)), metadata)
             self.assertEqual(parts[1].get_param("name", header="content-disposition"), "file")
             self.assertEqual(parts[1].get_filename(), "binnary-test.jar")
