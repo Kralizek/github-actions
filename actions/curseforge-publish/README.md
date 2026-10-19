@@ -80,6 +80,14 @@ CurseForge also accepts `gameVersionNames` directly in upload metadata:
 
 This bypasses version-ID discovery. **The upload API documents the field but does not document ambiguity handling for names shared across version types.** Prefer ID resolution (`game-version` or `game-versions`) when exact type identity is important. All three modes are mutually exclusive, and child uploads use none.
 
+## Dependency relations
+
+Each relation must have a supported relation `type` and identify the related project using a nonempty `slug`, a positive `projectID` (number or decimal string), or both. Project IDs are normalized to decimal strings for the upload API. Invalid identifiers are rejected before upload.
+
+## Upload errors
+
+Definitive 4xx responses (apart from HTTP 408) are reported as rejected requests and should be corrected before retrying. Timeouts, HTTP 408, server errors, and interrupted connections are treated as potentially uncertain outcomes: check the project's published files before another attempt.
+
 ## Streaming and upload safety
 
 Uploads use a streaming multipart body with an exact Content-Length. The action reads the artifact in 1 MiB chunks, not into memory all at once, and uses `application/octet-stream` so JARs and other file types work. The action does not automatically retry uncertain uploads; verify CurseForge publication state before retrying.
