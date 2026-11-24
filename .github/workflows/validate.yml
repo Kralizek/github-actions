@@ -23,6 +23,22 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Validate action manifests as YAML
+        shell: bash
+        run: |
+          python -m pip install PyYAML
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for manifest in sorted(Path("actions").glob("*/action.yml")):
+              print(f"Validating {manifest}", flush=True)
+              with manifest.open() as stream:
+                  document = yaml.safe_load(stream)
+              if not isinstance(document, dict):
+                  raise ValueError(f"{manifest}: expected a YAML mapping")
+          PY
+
       - name: Validate action folder contract
         shell: bash
         run: |

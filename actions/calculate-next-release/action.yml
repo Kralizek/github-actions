@@ -7,7 +7,7 @@ inputs:
     required: false
     default: periodic
   period:
-    description: Sequence reset boundary used by the periodic scheme: year, month, week, or day.
+    description: 'Sequence reset boundary used by the periodic scheme: year, month, week, or day.'
     required: false
     default: month
   format:
